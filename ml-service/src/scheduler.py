@@ -284,7 +284,7 @@ def init_scheduler():
     # Job 1: Daily Summary - 2 AM UTC
     scheduler.add_job(
         job_daily_summary,
-        trigger=CronTrigger(hour=2, minute=0, tz=tz),
+        trigger=CronTrigger(hour=2, minute=0, timezone=tz),
         id='job_daily_summary',
         name='Daily Summary'
     )
@@ -292,7 +292,7 @@ def init_scheduler():
     # Job 2: Burnout Score - Every 4 hours
     scheduler.add_job(
         job_burnout_score,
-        trigger=CronTrigger(hour='*/4', tz=tz),
+        trigger=CronTrigger(hour='*/4', timezone=tz),
         id='job_burnout_score',
         name='Burnout Score'
     )
@@ -300,7 +300,7 @@ def init_scheduler():
     # Job 3: Forecast - Every 6 hours
     scheduler.add_job(
         job_forecast,
-        trigger=CronTrigger(hour='*/6', tz=tz),
+        trigger=CronTrigger(hour='*/6', timezone=tz),
         id='job_forecast',
         name='Forecast'
     )
@@ -308,7 +308,7 @@ def init_scheduler():
     # Job 4: Alert Generation - Every hour
     scheduler.add_job(
         job_alert_generation,
-        trigger=CronTrigger(minute=0, tz=tz),
+        trigger=CronTrigger(minute=0, timezone=tz),
         id='job_alert_generation',
         name='Alert Generation'
     )
@@ -316,7 +316,7 @@ def init_scheduler():
     # Job 5: Batch Processing - Daily at 3 AM UTC
     scheduler.add_job(
         job_batch_processing,
-        trigger=CronTrigger(hour=3, minute=0, tz=tz),
+        trigger=CronTrigger(hour=3, minute=0, timezone=tz),
         id='job_batch_processing',
         name='Batch Processing'
     )
