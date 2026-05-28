@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 import { motion } from 'framer-motion';
-import { userAPI } from '@/app/lib/api';
+import { activityAPI, userAPI } from '@/app/lib/api';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { AlertCircle, TrendingUp, Activity, Clock, Zap, ArrowUp, ArrowDown, Flame } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -28,14 +28,26 @@ const item = {
 
 export default function ModernDashboard() {
   const [burnoutScore, setBurnoutScore] = useState<any>(null);
+  const [dailySummary, setDailySummary] = useState<any>(null);
+  const [weeklyLogs, setWeeklyLogs] = useState<any[]>([]);
   const [trendData, setTrendData] = useState<any[]>([]);
 
   const { data: scoreData, isLoading: scoreLoading } = useSWR('/api/user/burnout-score', () => userAPI.getBurnoutScore());
   const { data: historyData } = useSWR('/api/user/burnout-history?days=30', () => userAPI.getBurnoutHistory(30));
+  const { data: dailySummaryData } = useSWR('/api/activity/daily-summary', () => activityAPI.getDailySummary());
+  const { data: weeklyLogsData } = useSWR('/api/activity/logs?days=7', () => activityAPI.getLogs(7));
 
   useEffect(() => {
     if (scoreData) setBurnoutScore(scoreData);
   }, [scoreData]);
+
+  useEffect(() => {
+    if (dailySummaryData) setDailySummary(dailySummaryData);
+  }, [dailySummaryData]);
+
+  useEffect(() => {
+    if (weeklyLogsData?.logs) setWeeklyLogs(weeklyLogsData.logs);
+  }, [weeklyLogsData]);
 
   useEffect(() => {
     if (historyData?.scores) {
@@ -48,11 +60,59 @@ export default function ModernDashboard() {
     }
   }, [historyData]);
 
+  const activeDays = weeklyLogs.length
+    ? new Set(weeklyLogs.map((log: any) => new Date(log.timestamp).toISOString().split('T')[0])).size
+    : 0;
+
+  const weeklyActivityValue = activeDays > 0 ? Math.min(100, Math.round((activeDays / 7) * 100)) : 0;
+  const avgSleepValue = burnoutScore?.components?.sleep_quality !== undefined
+    ? Math.max(0, 10 - burnoutScore.components.sleep_quality / 10).toFixed(1)
+    : null;
+  const energyLevelValue = burnoutScore?.score !== undefined
+    ? Math.max(0, Math.round(100 - burnoutScore.score))
+    : null;
+  const stressIndexValue = burnoutScore?.score !== undefined
+    ? Math.round(burnoutScore.score)
+    : null;
+
+  const insights = [
+    {
+      title: 'Work-Life Balance',
+      desc: dailySummary
+        ? dailySummary.breaks_taken >= 2
+          ? 'You took breaks today — keep this rhythm to stay stable.'
+          : 'Take at least 2 breaks today to prevent burnout escalation.'
+      : 'Collecting today’s activity data...',
+      icon: AlertCircle,
+      color: 'primary',
+    },
+    {
+      title: 'Sleep Schedule',
+      desc: dailySummary
+        ? dailySummary.late_night_usage
+          ? 'Late-night usage detected. Try to wind down before bedtime.'
+          : 'No late-night use today — good job protecting sleep quality.'
+      : 'Collecting today’s sleep cues...',
+      icon: Clock,
+      color: 'secondary',
+    },
+    {
+      title: 'Movement',
+      desc: dailySummary
+        ? dailySummary.total_screen_time > 480
+          ? 'High screen time today — move every hour and stretch often.'
+          : 'Screen time is in a healthy range right now.'
+      : 'Collecting today’s movement signals...',
+      icon: Activity,
+      color: 'green',
+    },
+  ];
+
   const getRiskGradient = (level: string) => {
     switch (level) {
       case 'critical': return 'from-red-500 via-orange-500 to-yellow-500';
       case 'high': return 'from-orange-500 via-yellow-500 to-amber-500';
-      case 'moderate': return 'from-yellow-500 via-lime-500 to-green-500';
+      case 'medium': return 'from-yellow-500 via-lime-500 to-green-500';
       default: return 'from-green-500 via-teal-500 to-cyan-500';
     }
   };
@@ -61,7 +121,7 @@ export default function ModernDashboard() {
     switch (level) {
       case 'critical': return '#ff3b30';
       case 'high': return '#ff9500';
-      case 'moderate': return '#ffd60a';
+      case 'medium': return '#ffd60a';
       default: return '#00ff88';
     }
   };
@@ -153,7 +213,7 @@ export default function ModernDashboard() {
                     'inline-block px-4 py-2 rounded-lg font-semibold mb-4 text-white',
                     burnoutScore.risk_level === 'critical' && 'bg-red-500/20 border border-red-500/50 text-red-300',
                     burnoutScore.risk_level === 'high' && 'bg-orange-500/20 border border-orange-500/50 text-orange-300',
-                    burnoutScore.risk_level === 'moderate' && 'bg-yellow-500/20 border border-yellow-500/50 text-yellow-300',
+                    burnoutScore.risk_level === 'medium' && 'bg-yellow-500/20 border border-yellow-500/50 text-yellow-300',
                     burnoutScore.risk_level === 'low' && 'bg-green-500/20 border border-green-500/50 text-green-300',
                   )}>
                     {burnoutScore.risk_level.toUpperCase()} RISK
@@ -177,12 +237,17 @@ export default function ModernDashboard() {
                   <p className="text-sm text-muted-foreground mb-4">
                     {burnoutScore.risk_level === 'critical' && 'Immediate action recommended. Schedule rest and seek support.'}
                     {burnoutScore.risk_level === 'high' && 'Take preventive measures. Adjust your daily routine and prioritize wellbeing.'}
-                    {burnoutScore.risk_level === 'moderate' && 'Maintain balance. Keep monitoring your health metrics.'}
+                    {burnoutScore.risk_level === 'medium' && 'Maintain balance. Keep monitoring your health metrics.'}
                     {burnoutScore.risk_level === 'low' && 'Great job! Keep maintaining your healthy habits.'}
                   </p>
                   <Button className="w-full bg-gradient-to-r from-primary to-secondary hover:shadow-lg hover:shadow-primary/50">
                     View Recommendations
                   </Button>
+                  {dailySummary && (
+                    <p className="text-xs text-muted-foreground mt-3">
+                      Today’s record: {dailySummary.log_count} activity logs, {dailySummary.breaks_taken} breaks, {dailySummary.late_night_usage ? 'late-night usage recorded' : 'no late-night usage'}.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -191,10 +256,31 @@ export default function ModernDashboard() {
 
         {/* Metrics Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <MetricCard icon={Activity} label="Weekly Activity" value="89%" trend={5} color="cyan" />
-          <MetricCard icon={Clock} label="Avg Sleep" value="7.2h" trend={-2} color="purple" />
-          <MetricCard icon={Zap} label="Energy Level" value="72%" trend={3} color="green" />
-          <MetricCard icon={Flame} label="Stress Index" value="65%" trend={8} color="orange" />
+          <MetricCard
+            icon={Activity}
+            label="Weekly Activity"
+            value={`${weeklyActivityValue}%`}
+            trend={activeDays ? 5 : undefined}
+            color="cyan"
+          />
+          <MetricCard
+            icon={Clock}
+            label="Avg Sleep"
+            value={avgSleepValue !== null ? `${avgSleepValue}h` : '—'}
+            color="purple"
+          />
+          <MetricCard
+            icon={Zap}
+            label="Energy Level"
+            value={energyLevelValue !== null ? `${energyLevelValue}%` : '—'}
+            color="green"
+          />
+          <MetricCard
+            icon={Flame}
+            label="Stress Index"
+            value={stressIndexValue !== null ? `${stressIndexValue}%` : '—'}
+            color="orange"
+          />
         </div>
 
         {/* Charts Section */}
@@ -230,11 +316,7 @@ export default function ModernDashboard() {
           <motion.div variants={item} className="cyber-card p-6 space-y-4">
             <h3 className="text-xl font-bold mb-4 text-foreground">Insights & Recommendations</h3>
             <div className="space-y-3">
-              {[
-                { title: 'Work-Life Balance', desc: 'Consider taking breaks every 2 hours', icon: AlertCircle, color: 'primary' },
-                { title: 'Sleep Schedule', desc: 'Try to maintain consistent sleep hours', icon: Clock, color: 'secondary' },
-                { title: 'Movement', desc: 'Increase daily movement to 10,000 steps', icon: Activity, color: 'green' },
-              ].map((insight, idx) => (
+              {insights.map((insight, idx) => (
                 <motion.div
                   key={idx}
                   initial={{ opacity: 0, x: -20 }}
