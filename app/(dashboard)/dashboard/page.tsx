@@ -32,10 +32,10 @@ export default function ModernDashboard() {
   const [weeklyLogs, setWeeklyLogs] = useState<any[]>([]);
   const [trendData, setTrendData] = useState<any[]>([]);
 
-  const { data: scoreData, isLoading: scoreLoading } = useSWR('/api/user/burnout-score', () => userAPI.getBurnoutScore());
-  const { data: historyData } = useSWR('/api/user/burnout-history?days=30', () => userAPI.getBurnoutHistory(30));
-  const { data: dailySummaryData } = useSWR('/api/activity/daily-summary', () => activityAPI.getDailySummary());
-  const { data: weeklyLogsData } = useSWR('/api/activity/logs?days=7', () => activityAPI.getLogs(7));
+  const { data: scoreData, isLoading: scoreLoading } = useSWR('/api/user/burnout-score', () => userAPI.getBurnoutScore(), { refreshInterval: 15000, revalidateOnFocus: true });
+  const { data: historyData } = useSWR('/api/user/burnout-history?days=30', () => userAPI.getBurnoutHistory(30), { refreshInterval: 45000, revalidateOnFocus: true });
+  const { data: dailySummaryData } = useSWR('/api/activity/daily-summary', () => activityAPI.getDailySummary(), { refreshInterval: 15000, revalidateOnFocus: true });
+  const { data: weeklyLogsData } = useSWR('/api/activity/logs?days=7', () => activityAPI.getLogs(7), { refreshInterval: 30000, revalidateOnFocus: true });
 
   useEffect(() => {
     if (scoreData) setBurnoutScore(scoreData);
@@ -65,9 +65,9 @@ export default function ModernDashboard() {
     : 0;
 
   const weeklyActivityValue = activeDays > 0 ? Math.min(100, Math.round((activeDays / 7) * 100)) : 0;
-  const avgSleepValue = burnoutScore?.components?.sleep_quality !== undefined
-    ? Math.max(0, 10 - burnoutScore.components.sleep_quality / 10).toFixed(1)
-    : null;
+  const screenTimeValue = dailySummary?.total_screen_time !== undefined
+    ? `${Math.round(dailySummary.total_screen_time / 60)}h ${dailySummary.total_screen_time % 60}m`
+    : '—';
   const energyLevelValue = burnoutScore?.score !== undefined
     ? Math.max(0, Math.round(100 - burnoutScore.score))
     : null;
@@ -265,8 +265,8 @@ export default function ModernDashboard() {
           />
           <MetricCard
             icon={Clock}
-            label="Avg Sleep"
-            value={avgSleepValue !== null ? `${avgSleepValue}h` : '—'}
+            label="Screen Time"
+            value={screenTimeValue}
             color="purple"
           />
           <MetricCard

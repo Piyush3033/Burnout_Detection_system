@@ -3,9 +3,10 @@
 import { useAuth } from '@/app/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { Button } from '@/components/ui/button';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, logout, user } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -31,6 +32,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <main className="min-h-screen bg-background">
+      <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 px-6 py-4 border-b border-border/50 bg-background/80 backdrop-blur-sm">
+        <div>
+          <p className="text-sm text-muted-foreground">Welcome back{user?.full_name ? `, ${user.full_name}` : ''}</p>
+          <h1 className="text-2xl font-semibold text-foreground">Burnout Dashboard</h1>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button onClick={logout} className="bg-destructive text-white hover:bg-destructive/90">
+            Logout
+          </Button>
+        </div>
+      </header>
       {children}
     </main>
   );

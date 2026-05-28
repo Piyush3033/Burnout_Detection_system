@@ -1,4 +1,5 @@
 import { dbManager, SyncQueueItem } from './indexedDB';
+import { API_URL } from '@/app/lib/api';
 
 export interface SyncStatus {
   isOnline: boolean;
@@ -20,23 +21,52 @@ class SyncManager {
   };
   private syncInterval: NodeJS.Timeout | null = null;
   private isSyncing = false;
+  private backendUrl = `${API_URL.replace(/\/$/, '')}/health`;
 
   constructor() {
     if (typeof window !== 'undefined') {
       window.addEventListener('online', () => this.handleOnline());
       window.addEventListener('offline', () => this.handleOffline());
+      void this.updateNetworkStatus();
     }
   }
 
-  private handleOnline() {
-    this.syncStatus.isOnline = true;
-    this.notifyListeners();
-    this.startSync();
+  private async handleOnline() {
+    const online = await this.updateNetworkStatus();
+    if (online) {
+      await this.startSync();
+    }
   }
 
   private handleOffline() {
     this.syncStatus.isOnline = false;
     this.notifyListeners();
+  }
+
+  private async checkBackendConnection(): Promise<boolean> {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+
+      const response = await fetch(this.backendUrl, {
+        method: 'GET',
+        signal: controller.signal,
+        cache: 'no-store',
+        headers: { Accept: 'application/json' }
+      });
+
+      clearTimeout(timeout);
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  private async updateNetworkStatus(): Promise<boolean> {
+    const online = await this.checkBackendConnection();
+    this.syncStatus.isOnline = online;
+    this.notifyListeners();
+    return online;
   }
 
   private notifyListeners() {
@@ -66,7 +96,8 @@ class SyncManager {
   }
 
   async startSync() {
-    if (this.isSyncing || !this.syncStatus.isOnline) return;
+    const online = await this.updateNetworkStatus();
+    if (this.isSyncing || !online) return;
 
     this.isSyncing = true;
     this.syncStatus.isSyncing = true;
@@ -110,8 +141,9 @@ class SyncManager {
   startPeriodicSync(intervalMs = 30000) {
     if (this.syncInterval) clearInterval(this.syncInterval);
     this.syncInterval = setInterval(() => {
+      void this.updateNetworkStatus();
       if (this.syncStatus.isOnline && this.syncStatus.pendingItems > 0) {
-        this.startSync();
+        void this.startSync();
       }
     }, intervalMs);
   }
