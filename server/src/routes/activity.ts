@@ -8,6 +8,7 @@ const router = express.Router();
 
 const activityInputSchema = z.object({
   screen_time_minutes: z.number().min(0).optional(),
+  total_screen_time_minutes: z.number().min(0).optional(),
   active_window: z.string().optional(),
   idle_time_minutes: z.number().min(0).optional(),
   idle_time_seconds: z.number().min(0).optional(),
@@ -22,6 +23,16 @@ const activityInputSchema = z.object({
     is_late_night: z.boolean().optional(),
     break_taken: z.boolean().optional(),
     total_activity_score: z.number().min(0).optional()
+  }).optional(),
+  system: z.object({
+    cpu_percent: z.number().min(0).optional(),
+    memory_percent: z.number().min(0).optional(),
+    memory_available_mb: z.number().optional(),
+    disk_percent: z.number().min(0).optional(),
+    disk_available_gb: z.number().optional(),
+    cpu_uptime_seconds: z.number().min(0).optional(),
+    active_window: z.string().optional(),
+    active_window_changes: z.number().min(0).optional()
   }).optional(),
   timestamp: z.string().optional()
 });
@@ -48,6 +59,10 @@ function normalizeActivityPayload(data: z.infer<typeof activityInputSchema>) {
     is_late_night,
     break_taken
   };
+}
+
+function normalizeSystemPayload(data: z.infer<typeof activityInputSchema>) {
+  return data.system || {};
 }
 
 function parseTimestamp(value?: string): Date {
@@ -111,10 +126,12 @@ router.post('/log', authMiddleware, async (req: AuthRequest, res: Response) => {
     const normalized = normalizeActivityPayload(payload);
     const parsedTimestamp: Date = parseTimestamp(payload.timestamp as string | undefined);
 
+    const systemPayload = normalizeSystemPayload(payload);
     const activityLog = new ActivityLog({
       user_id: req.userId,
       timestamp: parsedTimestamp,
-      data: normalized
+      data: normalized,
+      system: systemPayload
     });
 
     await activityLog.save();
@@ -144,10 +161,12 @@ router.post('/batch', authMiddleware, async (req: AuthRequest, res: Response) =>
       const normalized = normalizeActivityPayload(entry);
       const parsedTimestamp: Date = parseTimestamp(entry.timestamp as string | undefined);
 
+      const systemPayload = normalizeSystemPayload(entry);
       const activityLog = new ActivityLog({
         user_id: req.userId,
         timestamp: parsedTimestamp,
-        data: normalized
+        data: normalized,
+        system: systemPayload
       });
       await activityLog.save();
       createdLogs.push(activityLog);
@@ -210,6 +229,19 @@ router.get('/daily-summary', authMiddleware, async (req: AuthRequest, res: Respo
       timestamp: { $gte: startOfDay, $lte: endOfDay }
     });
 
+    const appUsageMap: Record<string, number> = {};
+    const totalCpuPercent = logs.reduce((sum, log) => sum + (log.system?.cpu_percent ?? 0), 0);
+    const totalMemoryPercent = logs.reduce((sum, log) => sum + (log.system?.memory_percent ?? 0), 0);
+    const totalSystemLogs = logs.filter((log) => log.system !== undefined).length;
+
+    logs.forEach((log) => {
+      const appName = log.system?.active_window || log.data.active_window || 'unknown';
+      appUsageMap[appName] = (appUsageMap[appName] || 0) + 1;
+    });
+
+    const topApplication = Object.entries(appUsageMap).sort((a, b) => b[1] - a[1])[0]?.[0] || 'unknown';
+    const maxCpuUptime = logs.reduce((max, log) => Math.max(max, log.system?.cpu_uptime_seconds ?? 0), 0);
+
     const summary = {
       date: date.toISOString().split('T')[0],
       total_screen_time: logs.reduce((sum, log) => sum + log.data.screen_time_minutes, 0),
@@ -217,7 +249,11 @@ router.get('/daily-summary', authMiddleware, async (req: AuthRequest, res: Respo
       total_app_switches: logs.reduce((sum, log) => sum + log.data.app_switches, 0),
       breaks_taken: logs.filter(log => log.data.break_taken).length,
       log_count: logs.length,
-      late_night_usage: logs.filter(log => log.data.is_late_night).length > 0
+      late_night_usage: logs.filter(log => log.data.is_late_night).length > 0,
+      avg_cpu_percent: totalSystemLogs ? parseFloat((totalCpuPercent / totalSystemLogs).toFixed(2)) : 0,
+      avg_memory_percent: totalSystemLogs ? parseFloat((totalMemoryPercent / totalSystemLogs).toFixed(2)) : 0,
+      cpu_uptime_seconds: maxCpuUptime,
+      top_application: topApplication
     };
 
     res.json(summary);

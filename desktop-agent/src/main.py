@@ -36,28 +36,27 @@ class BurnoutAgent:
     def __init__(self):
         self.api_url = os.getenv('API_URL', 'http://localhost:5000')
         self.user_token = os.getenv('USER_TOKEN')
-        self.collection_interval = int(os.getenv('COLLECTION_INTERVAL', 15))  # minutes
+        self.collection_interval_seconds = int(os.getenv('COLLECTION_INTERVAL_SECONDS', 5))
         
         self.collector = DataCollector()
         self.uploader = DataUploader(self.api_url, self.user_token)
         self.monitor = SystemMonitor()
         
         self.scheduler = BackgroundScheduler()
-        logger.info(f'Burnout Agent initialized (interval: {self.collection_interval}min)')
+        logger.info(f'Burnout Agent initialized (interval: {self.collection_interval_seconds}s)')
     
     def collect_and_upload(self):
         """Collect data and upload to server"""
         try:
             logger.info('Starting data collection cycle')
             
-            # Collect OS-level data
             activity_data = self.collector.collect_activity()
-            system_data = self.collector.collect_system_metrics()
+            system_data = self.monitor.get_system_health()
+            system_data['cpu_uptime_seconds'] = self.collector.get_cpu_uptime()
             
-            # Derive screen time and break indicators when missing
             if 'screen_time_minutes' not in activity_data:
                 idle_seconds = activity_data.get('idle_time_seconds', 0)
-                active_minutes = max(0, self.collection_interval - round(idle_seconds / 60))
+                active_minutes = max(0, round(max(0, self.collection_interval_seconds - idle_seconds) / 60, 2))
                 activity_data['screen_time_minutes'] = active_minutes
 
             if 'is_late_night' not in activity_data:
@@ -67,14 +66,12 @@ class BurnoutAgent:
             if 'break_taken' not in activity_data:
                 activity_data['break_taken'] = activity_data.get('idle_time_seconds', 0) >= 300
 
-            # Combine data
             payload = {
                 'activity': activity_data,
                 'system': system_data,
                 'timestamp': self._get_timestamp(),
             }
             
-            # Upload to server
             success = self.uploader.upload(payload)
             if success:
                 logger.info('Data uploaded successfully')
@@ -91,7 +88,7 @@ class BurnoutAgent:
             self.scheduler.add_job(
                 self.collect_and_upload,
                 'interval',
-                minutes=self.collection_interval,
+                seconds=self.collection_interval_seconds,
                 id='collect_task'
             )
             

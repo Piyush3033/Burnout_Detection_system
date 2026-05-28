@@ -11,6 +11,16 @@ export interface IActivityLog extends Document {
     is_late_night: boolean;
     break_taken: boolean;
   };
+  system?: {
+    cpu_percent?: number;
+    memory_percent?: number;
+    memory_available_mb?: number;
+    disk_percent?: number;
+    disk_available_gb?: number;
+    cpu_uptime_seconds?: number;
+    active_window?: string;
+    active_window_changes?: number;
+  };
 }
 
 const activityLogSchema = new Schema<IActivityLog>(
@@ -32,6 +42,16 @@ const activityLogSchema = new Schema<IActivityLog>(
       app_switches: { type: Number, default: 0 },
       is_late_night: { type: Boolean, default: false },
       break_taken: { type: Boolean, default: false }
+    },
+    system: {
+      cpu_percent: { type: Number, default: 0 },
+      memory_percent: { type: Number, default: 0 },
+      memory_available_mb: { type: Number, default: 0 },
+      disk_percent: { type: Number, default: 0 },
+      disk_available_gb: { type: Number, default: 0 },
+      cpu_uptime_seconds: { type: Number, default: 0 },
+      active_window: { type: String, default: '' },
+      active_window_changes: { type: Number, default: 0 }
     }
   },
   { collection: 'activity_logs' }
