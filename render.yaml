@@ -6,3 +6,7 @@ services:
     envVars:
       - key: CORS_ORIGIN
         value: "https://burnout-detection-system-v212.vercel.app"
+      - key: NEXT_PUBLIC_ML_URL
+        value: "https://ml-service-1nhu.onrender.com"
+      - key: ML_SERVICE_URL
+        value: "https://ml-service-1nhu.onrender.com"

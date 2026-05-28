@@ -6,6 +6,7 @@ Real-time OS-level data collection and monitoring
 import logging
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -33,7 +34,7 @@ class BurnoutAgent:
     """Main agent that orchestrates data collection and uploads"""
     
     def __init__(self):
-        self.api_url = os.getenv('API_URL', 'http://localhost:3000')
+        self.api_url = os.getenv('API_URL', 'http://localhost:5000')
         self.user_token = os.getenv('USER_TOKEN')
         self.collection_interval = int(os.getenv('COLLECTION_INTERVAL', 15))  # minutes
         
@@ -53,6 +54,19 @@ class BurnoutAgent:
             activity_data = self.collector.collect_activity()
             system_data = self.collector.collect_system_metrics()
             
+            # Derive screen time and break indicators when missing
+            if 'screen_time_minutes' not in activity_data:
+                idle_seconds = activity_data.get('idle_time_seconds', 0)
+                active_minutes = max(0, self.collection_interval - round(idle_seconds / 60))
+                activity_data['screen_time_minutes'] = active_minutes
+
+            if 'is_late_night' not in activity_data:
+                current_hour = datetime.utcnow().hour
+                activity_data['is_late_night'] = current_hour >= 22 or current_hour < 6
+
+            if 'break_taken' not in activity_data:
+                activity_data['break_taken'] = activity_data.get('idle_time_seconds', 0) >= 300
+
             # Combine data
             payload = {
                 'activity': activity_data,

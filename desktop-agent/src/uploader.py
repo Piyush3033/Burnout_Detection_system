@@ -43,7 +43,7 @@ class DataUploader:
                 timeout=10
             )
             
-            if response.status_code == 200:
+            if 200 <= response.status_code < 300:
                 logger.info('Data uploaded successfully')
                 return True
             elif response.status_code == 401:
@@ -82,7 +82,7 @@ class DataUploader:
                 timeout=15
             )
             
-            if response.status_code == 200:
+            if 200 <= response.status_code < 300:
                 logger.info(f'Batch upload successful - {len(data_list)} entries')
                 return True
             else:

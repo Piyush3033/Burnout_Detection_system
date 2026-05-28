@@ -31,8 +31,12 @@ class DataCollector:
     def _setup_event_listeners(self):
         """Setup keyboard and mouse event listeners"""
         try:
-            self.listener = keyboard.Listener(on_press=self._on_key_press)
-            self.listener.start()
+            self.keyboard_listener = keyboard.Listener(on_press=self._on_key_press)
+            self.keyboard_listener.start()
+
+            self.mouse_listener = mouse.Listener(on_move=self._on_mouse_move, on_click=self._on_mouse_click)
+            self.mouse_listener.start()
+
             logger.info('Event listeners started')
         except Exception as e:
             logger.error(f'Failed to setup event listeners: {str(e)}')
@@ -92,6 +96,21 @@ class DataCollector:
     def _calculate_idle_time(self) -> int:
         """Calculate idle time in seconds"""
         return int((datetime.utcnow() - self.last_activity_time).total_seconds())
+
+    def _on_mouse_move(self, x, y):
+        try:
+            self.mouse_event_count += 1
+            self.last_activity_time = datetime.utcnow()
+        except Exception:
+            pass
+
+    def _on_mouse_click(self, x, y, button, pressed):
+        try:
+            if pressed:
+                self.mouse_event_count += 1
+                self.last_activity_time = datetime.utcnow()
+        except Exception:
+            pass
     
     @staticmethod
     def _calculate_activity_score(
@@ -112,6 +131,8 @@ class DataCollector:
     
     def cleanup(self):
         """Cleanup resources"""
-        if hasattr(self, 'listener'):
-            self.listener.stop()
+        if hasattr(self, 'keyboard_listener'):
+            self.keyboard_listener.stop()
+        if hasattr(self, 'mouse_listener'):
+            self.mouse_listener.stop()
         logger.info('DataCollector cleaned up')

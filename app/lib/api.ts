@@ -3,6 +3,7 @@
  */
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
+const ML_SERVICE_URL = process.env.NEXT_PUBLIC_ML_URL || 'https://ml-service-1nhu.onrender.com';
 
 export interface ApiError extends Error {
   status?: number;
@@ -115,26 +116,26 @@ export const adminAPI = {
 // ML Service APIs
 export const mlAPI = {
   calculateScore: (data: any) =>
-    fetch(`${process.env.NEXT_PUBLIC_ML_URL || 'http://localhost:8000'}/api/scoring/calculate`, {
+    fetch(`${ML_SERVICE_URL}/api/scoring/calculate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }).then(r => r.json()),
 
   analyzeTrends: (scores: number[], days: number = 7) =>
-    fetch(`${process.env.NEXT_PUBLIC_ML_URL || 'http://localhost:8000'}/api/analytics/trends?days=${days}`, {
+    fetch(`${ML_SERVICE_URL}/api/analytics/trends?days=${days}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ scores }),
     }).then(r => r.json()),
 
   forecast: (scores: number[], daysAhead: number = 7) =>
-    fetch(`${process.env.NEXT_PUBLIC_ML_URL || 'http://localhost:8000'}/api/analytics/forecast?days_ahead=${daysAhead}`, {
+    fetch(`${ML_SERVICE_URL}/api/analytics/forecast?days_ahead=${daysAhead}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ scores }),
     }).then(r => r.json()),
 
   getRiskLevels: () =>
-    fetch(`${process.env.NEXT_PUBLIC_ML_URL || 'http://localhost:8000'}/api/scoring/risk-levels`).then(r => r.json()),
+    fetch(`${ML_SERVICE_URL}/api/scoring/risk-levels`).then(r => r.json()),
 };
