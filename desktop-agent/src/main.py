@@ -38,7 +38,7 @@ class BurnoutAgent:
         self.user_token = os.getenv('USER_TOKEN')
         self.collection_interval_seconds = int(os.getenv('COLLECTION_INTERVAL_SECONDS', 5))
         
-        self.collector = DataCollector(self.collection_interval_seconds)
+        self.collector = DataCollector()
         self.uploader = DataUploader(self.api_url, self.user_token)
         self.monitor = SystemMonitor()
         
