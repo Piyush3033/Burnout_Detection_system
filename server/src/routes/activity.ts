@@ -50,6 +50,10 @@ function normalizeActivityPayload(data: z.infer<typeof activityInputSchema>) {
   };
 }
 
+function parseTimestamp(value: string | undefined): Date {
+  return value ? new Date(value) : new Date();
+}
+
 function calculateBurnoutComponents(logData: ReturnType<typeof normalizeActivityPayload>) {
   const screenTimeScore = Math.min(100, (logData.screen_time_minutes / 600) * 100);
   const breakScore = logData.break_taken ? 100 : 50;
@@ -104,7 +108,7 @@ router.post('/log', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const payload = activityInputSchema.parse(req.body);
     const normalized = normalizeActivityPayload(payload);
-    const timestamp = payload.timestamp ? new Date(payload.timestamp) : new Date();
+    const timestamp = parseTimestamp(payload.timestamp);
 
     const activityLog = new ActivityLog({
       user_id: req.userId,
@@ -136,7 +140,7 @@ router.post('/batch', authMiddleware, async (req: AuthRequest, res: Response) =>
 
     for (const entry of payload.entries) {
       const normalized = normalizeActivityPayload(entry);
-      const timestamp = entry.timestamp ? new Date(entry.timestamp) : new Date();
+      const timestamp = parseTimestamp(entry.timestamp);
 
       const activityLog = new ActivityLog({
         user_id: req.userId,
