@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { BACKEND_URL } from '@/app/lib/backend';
 
 export async function POST(req: NextRequest) {
   try {
     const { name, email, password } = await req.json();
 
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/auth/register`, {
+    const response = await fetch(`${BACKEND_URL}/api/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, email, password }),

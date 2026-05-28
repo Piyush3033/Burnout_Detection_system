@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { BACKEND_URL } from '@/app/lib/backend';
 
 export async function GET(req: NextRequest) {
   try {
@@ -12,7 +13,7 @@ export async function GET(req: NextRequest) {
     }
 
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/analytics/trends?range=${range}`,
+      `${BACKEND_URL}/api/analytics/trends?range=${range}`,
       {
         headers: { Authorization: `Bearer ${token}` },
       }

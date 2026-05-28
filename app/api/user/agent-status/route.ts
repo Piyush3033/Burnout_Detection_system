@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { BACKEND_URL } from '@/app/lib/backend';
 
 export async function GET() {
   try {
@@ -11,7 +12,7 @@ export async function GET() {
     }
 
     const response = await fetch(
-      `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/user/agent-status`,
+      `${BACKEND_URL}/api/user/agent-status`,
       {
         headers: { Authorization: `Bearer ${token}` },
       }
