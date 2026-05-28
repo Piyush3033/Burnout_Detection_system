@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: burnout-backend
+    env: node
+    plan: free
+    envVars:
+      - key: CORS_ORIGIN
+        value: "https://burnout-detection-system-v212.vercel.app"
