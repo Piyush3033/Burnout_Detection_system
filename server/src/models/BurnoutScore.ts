@@ -12,6 +12,8 @@ export interface IBurnoutScore extends Document {
     physical_activity: number;
     engagement: number;
   };
+  recommendation?: string;
+  rl_action?: string;
 }
 
 const burnoutScoreSchema = new Schema<IBurnoutScore>(
@@ -43,7 +45,9 @@ const burnoutScoreSchema = new Schema<IBurnoutScore>(
       sleep_quality: { type: Number, required: true },
       physical_activity: { type: Number, required: true },
       engagement: { type: Number, required: true }
-    }
+    },
+    recommendation: { type: String },
+    rl_action: { type: String }
   },
   { collection: 'burnout_scores' }
 );

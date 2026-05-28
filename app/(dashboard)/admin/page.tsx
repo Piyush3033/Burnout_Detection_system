@@ -5,19 +5,16 @@ import { useAuth } from '@/app/contexts/AuthContext';
 import { motion } from 'framer-motion';
 import useSWR from 'swr';
 import { adminAPI } from '@/app/lib/api';
-import { Users, Activity, AlertTriangle, Zap, TrendingUp, BarChart3, Shield, Settings } from 'lucide-react';
+import { Users, Activity, AlertTriangle, Zap, Shield, Settings, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import Link from 'next/link';
 
 const container = {
   hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: { staggerChildren: 0.1 },
-  },
+  show: { opacity: 1, transition: { staggerChildren: 0.1 } },
 };
 
 const item = {
@@ -28,15 +25,57 @@ const item = {
 export default function AdminDashboard() {
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [actionError, setActionError] = useState('');
 
-  // Check if user is admin
   const isAdmin = user?.role === 'admin';
 
-  const { data: systemStats } = useSWR('/api/admin/system-stats', () => adminAPI.getSystemStats());
-  const { data: userStats } = useSWR('/api/admin/user-stats', () => adminAPI.getUserStats());
-  const { data: jobLogs } = useSWR('/api/admin/job-logs', () => adminAPI.getJobLogs());
-  const { data: alertStats } = useSWR('/api/admin/alert-stats', () => adminAPI.getAlertStats());
+  const { data: systemStats, mutate: mutateStats } = useSWR(
+    isAdmin ? '/api/admin/system-stats' : null,
+    () => adminAPI.getSystemStats()
+  );
+  const { data: userStats } = useSWR(
+    isAdmin ? '/api/admin/user-stats' : null,
+    () => adminAPI.getUserStats()
+  );
+  const { data: jobLogs } = useSWR(isAdmin ? '/api/admin/job-logs' : null, () => adminAPI.getJobLogs());
+  const { data: alertStats } = useSWR(
+    isAdmin ? '/api/admin/alert-stats' : null,
+    () => adminAPI.getAlertStats()
+  );
+  const { data: usersData, mutate: mutateUsers } = useSWR(
+    isAdmin ? '/api/admin/users' : null,
+    () => adminAPI.getUsers(1, 100)
+  );
+
+  const users = usersData?.users || [];
+  const filteredUsers = users.filter(
+    (u: any) =>
+      u.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      u.full_name?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const handleDeactivate = async (userId: string) => {
+    setActionError('');
+    try {
+      await adminAPI.deactivateUser(userId);
+      mutateUsers();
+      mutateStats();
+    } catch (err: any) {
+      setActionError(err.data?.error || 'Failed to deactivate user');
+    }
+  };
+
+  const handleDelete = async (userId: string) => {
+    if (!confirm('Delete this user and all their activity data permanently?')) return;
+    setActionError('');
+    try {
+      await adminAPI.deleteUser(userId);
+      mutateUsers();
+      mutateStats();
+    } catch (err: any) {
+      setActionError(err.data?.error || 'Failed to delete user');
+    }
+  };
 
   if (!isAdmin) {
     return (
@@ -58,10 +97,10 @@ export default function AdminDashboard() {
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm text-muted-foreground mb-2">{label}</p>
-          <h3 className="text-3xl font-bold text-foreground">{value}</h3>
+          <h3 className="text-3xl font-bold text-foreground">{value ?? '—'}</h3>
           {trend !== undefined && (
-            <p className={`text-xs mt-2 ${trend > 0 ? 'text-green-400' : 'text-destructive'}`}>
-              {trend > 0 ? '↑' : '↓'} {Math.abs(trend)}% from last period
+            <p className={`text-xs mt-2 ${Number(trend) > 0 ? 'text-green-400' : 'text-destructive'}`}>
+              {Number(trend) > 0 ? '↑' : '↓'} {Math.abs(Number(trend))}% from last period
             </p>
           )}
         </div>
@@ -72,7 +111,6 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
-      {/* Header */}
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -81,26 +119,22 @@ export default function AdminDashboard() {
             </h1>
             <p className="text-muted-foreground">System monitoring and user management</p>
           </div>
-          <Link href="/admin/settings">
-            <Button variant="outline" size="icon" className="border-primary/50 hover:bg-primary/10">
-              <Settings className="w-5 h-5" />
-            </Button>
-          </Link>
         </div>
+        {actionError && (
+          <p className="text-destructive text-sm mb-4">{actionError}</p>
+        )}
       </motion.div>
 
       <motion.div variants={container} initial="hidden" animate="show" className="space-y-8">
-        {/* Key Metrics */}
         {systemStats && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard icon={Users} label="Total Users" value={systemStats.totalUsers} trend={systemStats.newUsersThisWeek} color="text-primary" />
             <StatCard icon={Activity} label="Active Sessions" value={systemStats.activeSessions} trend={systemStats.activeSessionsPercent} color="text-green-400" />
-            <StatCard icon={Zap} label="Scores Calculated" value={systemStats.scoresCalculatedToday} trend={5} color="text-purple-400" />
-            <StatCard icon={AlertTriangle} label="Critical Alerts" value={systemStats.criticalAlerts} trend={-2} color="text-destructive" />
+            <StatCard icon={Zap} label="Scores Today" value={systemStats.scoresCalculatedToday} color="text-purple-400" />
+            <StatCard icon={AlertTriangle} label="Critical Alerts" value={systemStats.criticalAlerts} color="text-destructive" />
           </div>
         )}
 
-        {/* Main Tabs */}
         <Tabs defaultValue="overview" className="space-y-6">
           <TabsList className="grid w-full max-w-md grid-cols-4 bg-black/30 border border-border">
             <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -109,10 +143,8 @@ export default function AdminDashboard() {
             <TabsTrigger value="jobs">Jobs</TabsTrigger>
           </TabsList>
 
-          {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Risk Distribution */}
               {userStats?.riskDistribution && (
                 <motion.div variants={item} className="cyber-card p-6">
                   <h3 className="text-lg font-bold mb-4">User Risk Distribution</h3>
@@ -131,7 +163,6 @@ export default function AdminDashboard() {
                 </motion.div>
               )}
 
-              {/* Growth Trend */}
               {userStats?.growthTrend && (
                 <motion.div variants={item} className="cyber-card p-6">
                   <h3 className="text-lg font-bold mb-4">User Growth (30 Days)</h3>
@@ -149,7 +180,6 @@ export default function AdminDashboard() {
             </div>
           </TabsContent>
 
-          {/* Users Tab */}
           <TabsContent value="users" className="space-y-6">
             <motion.div variants={item} className="cyber-card p-6">
               <div className="mb-6">
@@ -167,73 +197,78 @@ export default function AdminDashboard() {
                     <tr className="border-b border-border/50">
                       <th className="text-left py-3 px-4 text-muted-foreground">Name</th>
                       <th className="text-left py-3 px-4 text-muted-foreground">Email</th>
-                      <th className="text-left py-3 px-4 text-muted-foreground">Risk Level</th>
-                      <th className="text-left py-3 px-4 text-muted-foreground">Last Active</th>
+                      <th className="text-left py-3 px-4 text-muted-foreground">Role</th>
+                      <th className="text-left py-3 px-4 text-muted-foreground">Status</th>
                       <th className="text-left py-3 px-4 text-muted-foreground">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/30">
-                    {[...Array(5)].map((_, idx) => (
-                      <tr key={idx} className="hover:bg-black/20 transition-colors">
-                        <td className="py-3 px-4">User {idx + 1}</td>
-                        <td className="py-3 px-4 text-muted-foreground">user{idx + 1}@example.com</td>
+                    {filteredUsers.map((u: any) => (
+                      <tr key={u._id || u.id} className="hover:bg-black/20 transition-colors">
+                        <td className="py-3 px-4">{u.full_name || '—'}</td>
+                        <td className="py-3 px-4 text-muted-foreground">{u.email}</td>
+                        <td className="py-3 px-4 capitalize">{u.role}</td>
                         <td className="py-3 px-4">
-                          <span className={`px-2 py-1 rounded text-xs font-semibold ${idx % 3 === 0 ? 'bg-red-500/20 text-red-300' : idx % 3 === 1 ? 'bg-yellow-500/20 text-yellow-300' : 'bg-green-500/20 text-green-300'}`}>
-                            {idx % 3 === 0 ? 'HIGH' : idx % 3 === 1 ? 'MODERATE' : 'LOW'}
+                          <span className={`px-2 py-1 rounded text-xs font-semibold ${u.status === 'active' ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300'}`}>
+                            {u.status}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-muted-foreground">2 hours ago</td>
-                        <td className="py-3 px-4">
-                          <Link href={`/admin/users/${idx}`}>
-                            <Button variant="ghost" size="sm" className="hover:bg-primary/20 hover:text-primary">View</Button>
+                        <td className="py-3 px-4 flex gap-2">
+                          <Link href={`/admin/users/${u._id || u.id}`}>
+                            <Button variant="ghost" size="sm">View</Button>
                           </Link>
+                          {u.status === 'active' && u.role !== 'admin' && (
+                            <Button variant="outline" size="sm" onClick={() => handleDeactivate(u._id || u.id)}>
+                              Deactivate
+                            </Button>
+                          )}
+                          {u.role !== 'admin' && (
+                            <Button variant="destructive" size="sm" onClick={() => handleDelete(u._id || u.id)}>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+                {!filteredUsers.length && (
+                  <p className="text-center text-muted-foreground py-8">No users found</p>
+                )}
               </div>
             </motion.div>
           </TabsContent>
 
-          {/* Alerts Tab */}
           <TabsContent value="alerts" className="space-y-6">
             <motion.div variants={item} className="cyber-card p-6">
               <h3 className="text-lg font-bold mb-6">Recent Critical Alerts</h3>
               <div className="space-y-4">
-                {alertStats?.recentAlerts?.map((alert: any, idx: number) => (
-                  <div key={idx} className="p-4 rounded-lg bg-black/30 border border-destructive/30 hover:border-destructive/50 transition-colors">
-                    <div className="flex items-start gap-4">
-                      <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0 mt-1" />
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-foreground">{alert.user}</p>
-                        <p className="text-sm text-muted-foreground mt-1">{alert.message}</p>
-                        <p className="text-xs text-muted-foreground mt-2">{alert.timestamp}</p>
-                      </div>
-                      <Button variant="outline" size="sm" className="flex-shrink-0">
-                        Action
-                      </Button>
+                {alertStats?.recentAlerts?.length ? (
+                  alertStats.recentAlerts.map((alert: any, idx: number) => (
+                    <div key={idx} className="p-4 rounded-lg bg-black/30 border border-destructive/30">
+                      <p className="font-semibold">{alert.user}</p>
+                      <p className="text-sm text-muted-foreground mt-1">{alert.message}</p>
+                      <p className="text-xs text-muted-foreground mt-2">{alert.timestamp}</p>
                     </div>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <p className="text-muted-foreground text-sm">No recent high-risk alerts</p>
+                )}
               </div>
             </motion.div>
           </TabsContent>
 
-          {/* Jobs Tab */}
           <TabsContent value="jobs" className="space-y-6">
             <motion.div variants={item} className="cyber-card p-6">
               <h3 className="text-lg font-bold mb-6">Background Job Status</h3>
               <div className="space-y-3">
                 {jobLogs?.jobs?.map((job: any) => (
-                  <div key={job.id} className="p-4 rounded-lg bg-black/30 border border-border/50 flex items-center justify-between">
-                    <div className="flex-1">
-                      <p className="font-semibold text-foreground">{job.type.replace(/_/g, ' ').toUpperCase()}</p>
-                      <p className="text-xs text-muted-foreground mt-1">Last run: {job.lastRun} • Duration: {job.duration}</p>
+                  <div key={job.id} className="p-4 rounded-lg bg-black/30 border border-border/50 flex justify-between">
+                    <div>
+                      <p className="font-semibold">{job.type.replace(/_/g, ' ').toUpperCase()}</p>
+                      <p className="text-xs text-muted-foreground mt-1">Last run: {job.lastRun}</p>
                     </div>
-                    <div className={`px-3 py-1 rounded text-xs font-semibold ${job.status === 'success' ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300'}`}>
-                      {job.status.toUpperCase()}
-                    </div>
+                    <span className="px-3 py-1 rounded text-xs bg-green-500/20 text-green-300">{job.status}</span>
                   </div>
                 ))}
               </div>

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import ActivityLog from '../models/ActivityLog.js';
 import BurnoutScore from '../models/BurnoutScore.js';
+import { calculateBurnoutScore } from '../services/scoringService.js';
 
 const router = express.Router();
 
@@ -15,41 +16,62 @@ const activityInputSchema = z.object({
   app_switches: z.number().min(0).optional(),
   is_late_night: z.boolean().optional(),
   break_taken: z.boolean().optional(),
-  activity: z.object({
-    screen_time_minutes: z.number().min(0).optional(),
-    active_window: z.string().optional(),
-    idle_time_seconds: z.number().min(0).optional(),
-    app_switches: z.number().min(0).optional(),
-    is_late_night: z.boolean().optional(),
-    break_taken: z.boolean().optional(),
-    total_activity_score: z.number().min(0).optional()
-  }).optional(),
-  system: z.object({
-    cpu_percent: z.number().min(0).optional(),
-    memory_percent: z.number().min(0).optional(),
-    memory_available_mb: z.number().optional(),
-    disk_percent: z.number().min(0).optional(),
-    disk_available_gb: z.number().optional(),
-    cpu_uptime_seconds: z.number().min(0).optional(),
-    active_window: z.string().optional(),
-    active_window_changes: z.number().min(0).optional()
-  }).optional(),
-  timestamp: z.string().optional()
+  platform: z.enum(['desktop', 'android', 'web', 'ios']).optional(),
+  app_usage: z
+    .array(
+      z.object({
+        app_name: z.string(),
+        duration_minutes: z.number().min(0),
+      })
+    )
+    .optional(),
+  activity: z
+    .object({
+      screen_time_minutes: z.number().min(0).optional(),
+      active_window: z.string().optional(),
+      idle_time_seconds: z.number().min(0).optional(),
+      app_switches: z.number().min(0).optional(),
+      is_late_night: z.boolean().optional(),
+      break_taken: z.boolean().optional(),
+      app_name: z.string().optional(),
+      duration_minutes: z.number().min(0).optional(),
+      total_activity_score: z.number().min(0).optional(),
+    })
+    .optional(),
+  system: z
+    .object({
+      cpu_percent: z.number().min(0).optional(),
+      memory_percent: z.number().min(0).optional(),
+      memory_available_mb: z.number().optional(),
+      disk_percent: z.number().min(0).optional(),
+      disk_available_gb: z.number().optional(),
+      cpu_uptime_seconds: z.number().min(0).optional(),
+      active_window: z.string().optional(),
+      active_window_changes: z.number().min(0).optional(),
+    })
+    .optional(),
+  timestamp: z.string().optional(),
 });
 
 const batchSchema = z.object({
-  entries: z.array(activityInputSchema).min(1)
+  entries: z.array(activityInputSchema).min(1),
 });
 
 function normalizeActivityPayload(data: z.infer<typeof activityInputSchema>) {
   const activity = data.activity || {};
 
   const screen_time_minutes = data.screen_time_minutes ?? activity.screen_time_minutes ?? 0;
-  const idle_time_minutes = data.idle_time_minutes ?? (activity.idle_time_seconds !== undefined ? Math.round(activity.idle_time_seconds / 60) : 0);
+  const idle_time_minutes =
+    data.idle_time_minutes ??
+    (activity.idle_time_seconds !== undefined
+      ? Math.round(activity.idle_time_seconds / 60)
+      : 0);
   const app_switches = data.app_switches ?? activity.app_switches ?? 0;
   const is_late_night = data.is_late_night ?? activity.is_late_night ?? false;
   const break_taken = data.break_taken ?? activity.break_taken ?? false;
-  const active_window = data.active_window ?? activity.active_window ?? 'unknown';
+  const active_window =
+    data.active_window ?? activity.active_window ?? activity.app_name ?? 'unknown';
+  const platform = data.platform ?? 'desktop';
 
   return {
     screen_time_minutes,
@@ -57,7 +79,11 @@ function normalizeActivityPayload(data: z.infer<typeof activityInputSchema>) {
     idle_time_minutes,
     app_switches,
     is_late_night,
-    break_taken
+    break_taken,
+    platform,
+    app_name: activity.app_name ?? active_window,
+    duration_minutes: activity.duration_minutes ?? screen_time_minutes,
+    app_usage: data.app_usage ?? [],
   };
 }
 
@@ -69,79 +95,87 @@ function parseTimestamp(value?: string): Date {
   return value ? new Date(value) : new Date();
 }
 
-function calculateBurnoutComponents(logData: ReturnType<typeof normalizeActivityPayload>) {
-  const screenTimeScore = Math.min(100, (logData.screen_time_minutes / 600) * 100);
-  const breakScore = logData.break_taken ? 100 : 50;
-  const sleepScore = logData.is_late_night ? 30 : 80;
-  const physicalActivityScore = Math.min(100, logData.app_switches * 8);
-  const engagementScore = Math.max(0, 100 - logData.idle_time_minutes * 8);
-
-  const score = Math.round(
-    screenTimeScore * 0.28 +
-    breakScore * 0.18 +
-    sleepScore * 0.18 +
-    physicalActivityScore * 0.18 +
-    engagementScore * 0.18
-  );
-
-  const risk_level =
-    score >= 75 ? 'critical' :
-    score >= 50 ? 'high' :
-    score >= 25 ? 'medium' :
-    'low';
-
-  return {
-    score,
-    risk_level,
-    components: {
-      screen_time: parseFloat(screenTimeScore.toFixed(2)),
-      break_frequency: parseFloat(breakScore.toFixed(2)),
-      sleep_quality: parseFloat(sleepScore.toFixed(2)),
-      physical_activity: parseFloat(physicalActivityScore.toFixed(2)),
-      engagement: parseFloat(engagementScore.toFixed(2))
-    }
-  };
+async function getTodayBreakCount(userId: string): Promise<number> {
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  return ActivityLog.countDocuments({
+    user_id: userId,
+    timestamp: { $gte: startOfDay },
+    'data.break_taken': true,
+  });
 }
 
-async function saveBurnoutScoreInternal(userId: string, logData: ReturnType<typeof normalizeActivityPayload>, timestamp: any) {
-  const result = calculateBurnoutComponents(logData);
-  const scoreTimestamp = typeof timestamp === 'string' ? new Date(timestamp) : timestamp ?? new Date();
+async function saveBurnoutScoreInternal(
+  userId: string,
+  logData: ReturnType<typeof normalizeActivityPayload>,
+  timestamp: Date
+) {
+  const previous = await BurnoutScore.findOne({ user_id: userId }).sort({ timestamp: -1 });
+  const breaksToday = await getTodayBreakCount(userId);
+
+  const result = await calculateBurnoutScore(
+    {
+      screen_time_minutes: logData.screen_time_minutes,
+      active_window: logData.active_window,
+      idle_time_minutes: logData.idle_time_minutes,
+      app_switches: logData.app_switches,
+      is_late_night: logData.is_late_night,
+      breaks_taken: breaksToday + (logData.break_taken ? 1 : 0),
+      platform: logData.platform,
+    },
+    previous?.score
+  );
 
   const score = new BurnoutScore({
     user_id: userId,
-    timestamp: scoreTimestamp,
+    timestamp,
     score: result.score,
     risk_level: result.risk_level,
-    components: result.components
+    components: result.components,
+    recommendation: result.recommendation,
+    rl_action: result.rl_action,
   });
 
   await score.save();
-  return score;
+  return { score, result };
 }
 
-// Log activity from desktop agent
 router.post('/log', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const payload = activityInputSchema.parse(req.body);
     const normalized = normalizeActivityPayload(payload);
-    const parsedTimestamp: Date = parseTimestamp(payload.timestamp as string | undefined);
-
+    const parsedTimestamp = parseTimestamp(payload.timestamp);
     const systemPayload = normalizeSystemPayload(payload);
+
     const activityLog = new ActivityLog({
       user_id: req.userId,
       timestamp: parsedTimestamp,
-      data: normalized,
-      system: systemPayload
+      platform: normalized.platform,
+      data: {
+        screen_time_minutes: normalized.screen_time_minutes,
+        active_window: normalized.active_window,
+        idle_time_minutes: normalized.idle_time_minutes,
+        app_switches: normalized.app_switches,
+        is_late_night: normalized.is_late_night,
+        break_taken: normalized.break_taken,
+        app_name: normalized.app_name,
+        duration_minutes: normalized.duration_minutes,
+      },
+      app_usage: normalized.app_usage,
+      system: systemPayload,
     });
 
     await activityLog.save();
-    // @ts-ignore: parsedTimestamp is a Date via parseTimestamp helper
-    const burnoutScore = await saveBurnoutScoreInternal(req.userId, normalized, parsedTimestamp);
+    const { score: burnoutScore } = await saveBurnoutScoreInternal(
+      req.userId!,
+      normalized,
+      parsedTimestamp
+    );
 
     res.status(201).json({
       message: 'Activity logged successfully',
       activity: activityLog,
-      burnout_score: burnoutScore
+      burnout_score: burnoutScore,
     });
   } catch (error: any) {
     if (error.errors) {
@@ -159,20 +193,34 @@ router.post('/batch', authMiddleware, async (req: AuthRequest, res: Response) =>
 
     for (const entry of payload.entries) {
       const normalized = normalizeActivityPayload(entry);
-      const parsedTimestamp: Date = parseTimestamp(entry.timestamp as string | undefined);
-
+      const parsedTimestamp = parseTimestamp(entry.timestamp);
       const systemPayload = normalizeSystemPayload(entry);
+
       const activityLog = new ActivityLog({
         user_id: req.userId,
         timestamp: parsedTimestamp,
-        data: normalized,
-        system: systemPayload
+        platform: normalized.platform,
+        data: {
+          screen_time_minutes: normalized.screen_time_minutes,
+          active_window: normalized.active_window,
+          idle_time_minutes: normalized.idle_time_minutes,
+          app_switches: normalized.app_switches,
+          is_late_night: normalized.is_late_night,
+          break_taken: normalized.break_taken,
+          app_name: normalized.app_name,
+          duration_minutes: normalized.duration_minutes,
+        },
+        app_usage: normalized.app_usage,
+        system: systemPayload,
       });
       await activityLog.save();
       createdLogs.push(activityLog);
 
-      // @ts-ignore: parsedTimestamp is a Date via parseTimestamp helper
-      const burnoutScore = await saveBurnoutScoreInternal(req.userId, normalized, parsedTimestamp);
+      const { score: burnoutScore } = await saveBurnoutScoreInternal(
+        req.userId!,
+        normalized,
+        parsedTimestamp
+      );
       createdScores.push(burnoutScore);
     }
 
@@ -180,7 +228,7 @@ router.post('/batch', authMiddleware, async (req: AuthRequest, res: Response) =>
       message: 'Batch activity logged successfully',
       count: createdLogs.length,
       activities: createdLogs,
-      burnout_scores: createdScores
+      burnout_scores: createdScores,
     });
   } catch (error: any) {
     if (error.errors) {
@@ -190,7 +238,6 @@ router.post('/batch', authMiddleware, async (req: AuthRequest, res: Response) =>
   }
 });
 
-// Get activity logs (last N days)
 router.get('/logs', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const days = parseInt(req.query.days as string) || 7;
@@ -199,7 +246,7 @@ router.get('/logs', authMiddleware, async (req: AuthRequest, res: Response) => {
 
     const logs = await ActivityLog.find({
       user_id: req.userId,
-      timestamp: { $gte: startDate }
+      timestamp: { $gte: startDate },
     })
       .sort({ timestamp: -1 })
       .limit(500);
@@ -208,14 +255,80 @@ router.get('/logs', authMiddleware, async (req: AuthRequest, res: Response) => {
       user_id: req.userId,
       days,
       count: logs.length,
-      logs
+      logs,
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Get daily summary
+router.get('/app-usage', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const date = req.query.date ? new Date(req.query.date as string) : new Date();
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const logs = await ActivityLog.find({
+      user_id: req.userId,
+      timestamp: { $gte: startOfDay, $lte: endOfDay },
+    });
+
+    const usageMap: Record<
+      string,
+      { app_name: string; duration_minutes: number; platform: string; sessions: number }
+    > = {};
+
+    for (const log of logs) {
+      if (log.app_usage?.length) {
+        for (const entry of log.app_usage) {
+          const key = `${entry.app_name}:${log.platform}`;
+          if (!usageMap[key]) {
+            usageMap[key] = {
+              app_name: entry.app_name,
+              duration_minutes: 0,
+              platform: log.platform,
+              sessions: 0,
+            };
+          }
+          usageMap[key].duration_minutes += entry.duration_minutes;
+          usageMap[key].sessions += 1;
+        }
+      }
+
+      const appName = log.data.app_name || log.data.active_window || 'unknown';
+      const key = `${appName}:${log.platform}`;
+      if (!usageMap[key]) {
+        usageMap[key] = {
+          app_name: appName,
+          duration_minutes: 0,
+          platform: log.platform,
+          sessions: 0,
+        };
+      }
+      usageMap[key].duration_minutes += log.data.duration_minutes ?? log.data.screen_time_minutes;
+      usageMap[key].sessions += 1;
+    }
+
+    const apps = Object.values(usageMap).sort((a, b) => b.duration_minutes - a.duration_minutes);
+
+    res.json({
+      date: date.toISOString().split('T')[0],
+      total_apps: apps.length,
+      apps,
+      by_platform: {
+        desktop: apps.filter((a) => a.platform === 'desktop'),
+        android: apps.filter((a) => a.platform === 'android'),
+        web: apps.filter((a) => a.platform === 'web'),
+        ios: apps.filter((a) => a.platform === 'ios'),
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/daily-summary', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const date = req.query.date ? new Date(req.query.date as string) : new Date();
@@ -226,7 +339,7 @@ router.get('/daily-summary', authMiddleware, async (req: AuthRequest, res: Respo
 
     const logs = await ActivityLog.find({
       user_id: req.userId,
-      timestamp: { $gte: startOfDay, $lte: endOfDay }
+      timestamp: { $gte: startOfDay, $lte: endOfDay },
     });
 
     const appUsageMap: Record<string, number> = {};
@@ -235,11 +348,13 @@ router.get('/daily-summary', authMiddleware, async (req: AuthRequest, res: Respo
     const totalSystemLogs = logs.filter((log) => log.system !== undefined).length;
 
     logs.forEach((log) => {
-      const appName = log.system?.active_window || log.data.active_window || 'unknown';
-      appUsageMap[appName] = (appUsageMap[appName] || 0) + 1;
+      const appName = log.data.app_name || log.system?.active_window || log.data.active_window || 'unknown';
+      appUsageMap[appName] =
+        (appUsageMap[appName] || 0) + (log.data.duration_minutes ?? log.data.screen_time_minutes);
     });
 
-    const topApplication = Object.entries(appUsageMap).sort((a, b) => b[1] - a[1])[0]?.[0] || 'unknown';
+    const topApplication =
+      Object.entries(appUsageMap).sort((a, b) => b[1] - a[1])[0]?.[0] || 'unknown';
     const maxCpuUptime = logs.reduce((max, log) => Math.max(max, log.system?.cpu_uptime_seconds ?? 0), 0);
 
     const summary = {
@@ -247,13 +362,25 @@ router.get('/daily-summary', authMiddleware, async (req: AuthRequest, res: Respo
       total_screen_time: logs.reduce((sum, log) => sum + log.data.screen_time_minutes, 0),
       total_idle_time: logs.reduce((sum, log) => sum + log.data.idle_time_minutes, 0),
       total_app_switches: logs.reduce((sum, log) => sum + log.data.app_switches, 0),
-      breaks_taken: logs.filter(log => log.data.break_taken).length,
+      breaks_taken: logs.filter((log) => log.data.break_taken).length,
       log_count: logs.length,
-      late_night_usage: logs.filter(log => log.data.is_late_night).length > 0,
+      late_night_usage: logs.some((log) => log.data.is_late_night),
       avg_cpu_percent: totalSystemLogs ? parseFloat((totalCpuPercent / totalSystemLogs).toFixed(2)) : 0,
-      avg_memory_percent: totalSystemLogs ? parseFloat((totalMemoryPercent / totalSystemLogs).toFixed(2)) : 0,
+      avg_memory_percent: totalSystemLogs
+        ? parseFloat((totalMemoryPercent / totalSystemLogs).toFixed(2))
+        : 0,
       cpu_uptime_seconds: maxCpuUptime,
-      top_application: topApplication
+      top_application: topApplication,
+      app_usage: Object.entries(appUsageMap)
+        .map(([app_name, duration_minutes]) => ({ app_name, duration_minutes }))
+        .sort((a, b) => b.duration_minutes - a.duration_minutes)
+        .slice(0, 15),
+      platforms: {
+        desktop: logs.filter((l) => l.platform === 'desktop').length,
+        android: logs.filter((l) => l.platform === 'android').length,
+        web: logs.filter((l) => l.platform === 'web').length,
+        ios: logs.filter((l) => l.platform === 'ios').length,
+      },
     };
 
     res.json(summary);

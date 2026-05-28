@@ -31,8 +31,11 @@ export async function POST(req: NextRequest) {
     return res;
   } catch (error) {
     return NextResponse.json(
-      { error: 'Authentication failed' },
-      { status: 500 }
+      {
+        error: 'Authentication failed',
+        hint: 'Ensure BACKEND_URL is set on Vercel to your Render backend URL',
+      },
+      { status: 503 }
     );
   }
 }

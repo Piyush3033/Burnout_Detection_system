@@ -92,6 +92,32 @@ router.get('/analytics', authMiddleware, adminMiddleware, async (req: AuthReques
   }
 });
 
+// Delete user and all associated data (admin)
+router.delete('/users/:userId', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.params.userId;
+
+    if (userId === req.userId) {
+      return res.status(400).json({ error: 'Cannot delete your own account' });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    await Promise.all([
+      ActivityLog.deleteMany({ user_id: userId }),
+      BurnoutScore.deleteMany({ user_id: userId }),
+      User.findByIdAndDelete(userId),
+    ]);
+
+    res.json({ message: 'User and all associated data deleted successfully' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Deactivate user (admin)
 router.post('/users/:userId/deactivate', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
@@ -281,7 +307,7 @@ router.get('/alert-stats', authMiddleware, adminMiddleware, async (req: AuthRequ
 
     const formattedAlerts = recentAlerts.map((alert: any) => ({
       id: alert._id,
-      user: alert.user.name,
+      user: alert.user.full_name || alert.user.email,
       message: `${alert.risk_level.toUpperCase()} burnout risk detected - Score: ${alert.score}`,
       severity: alert.risk_level === 'critical' ? 'critical' : 'high',
       timestamp: new Date(alert.timestamp).toLocaleString()

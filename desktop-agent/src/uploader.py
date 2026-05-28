@@ -101,7 +101,7 @@ class DataUploader:
             bool: True if connection successful
         """
         try:
-            endpoint = f'{self.api_url}/api/health'
+            endpoint = f'{self.api_url}/health'
             response = self.session.get(endpoint, timeout=5)
             return response.status_code == 200
         except Exception:

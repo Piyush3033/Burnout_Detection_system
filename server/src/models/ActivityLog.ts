@@ -3,6 +3,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 export interface IActivityLog extends Document {
   user_id: mongoose.Types.ObjectId;
   timestamp: Date;
+  platform: 'desktop' | 'android' | 'web' | 'ios';
   data: {
     screen_time_minutes: number;
     active_window: string;
@@ -10,7 +11,10 @@ export interface IActivityLog extends Document {
     app_switches: number;
     is_late_night: boolean;
     break_taken: boolean;
+    app_name?: string;
+    duration_minutes?: number;
   };
+  app_usage?: Array<{ app_name: string; duration_minutes: number }>;
   system?: {
     cpu_percent?: number;
     memory_percent?: number;
@@ -35,6 +39,17 @@ const activityLogSchema = new Schema<IActivityLog>(
       required: true,
       default: Date.now
     },
+    platform: {
+      type: String,
+      enum: ['desktop', 'android', 'web', 'ios'],
+      default: 'desktop'
+    },
+    app_usage: [
+      {
+        app_name: { type: String, default: 'unknown' },
+        duration_minutes: { type: Number, default: 0 }
+      }
+    ],
     data: {
       screen_time_minutes: { type: Number, default: 0 },
       active_window: { type: String, default: '' },

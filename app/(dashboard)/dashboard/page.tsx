@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 import { motion } from 'framer-motion';
 import { activityAPI, userAPI } from '@/app/lib/api';
+import Link from 'next/link';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { AlertCircle, TrendingUp, Activity, Clock, Zap, ArrowUp, ArrowDown, Flame } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -31,11 +32,15 @@ export default function ModernDashboard() {
   const [dailySummary, setDailySummary] = useState<any>(null);
   const [weeklyLogs, setWeeklyLogs] = useState<any[]>([]);
   const [trendData, setTrendData] = useState<any[]>([]);
+  const [recommendations, setRecommendations] = useState<any[]>([]);
+  const [appUsage, setAppUsage] = useState<any[]>([]);
 
-  const { data: scoreData, isLoading: scoreLoading } = useSWR('/api/user/burnout-score', () => userAPI.getBurnoutScore(), { refreshInterval: 15000, revalidateOnFocus: true });
-  const { data: historyData } = useSWR('/api/user/burnout-history?days=30', () => userAPI.getBurnoutHistory(30), { refreshInterval: 45000, revalidateOnFocus: true });
-  const { data: dailySummaryData } = useSWR('/api/activity/daily-summary', () => activityAPI.getDailySummary(), { refreshInterval: 15000, revalidateOnFocus: true });
-  const { data: weeklyLogsData } = useSWR('/api/activity/logs?days=7', () => activityAPI.getLogs(7), { refreshInterval: 30000, revalidateOnFocus: true });
+  const { data: scoreData, isLoading: scoreLoading } = useSWR('/api/user/burnout-score', () => userAPI.getBurnoutScore(), { refreshInterval: 1000, revalidateOnFocus: true });
+  const { data: historyData } = useSWR('/api/user/burnout-history?days=30', () => userAPI.getBurnoutHistory(30), { refreshInterval: 30000, revalidateOnFocus: true });
+  const { data: dailySummaryData } = useSWR('/api/activity/daily-summary', () => activityAPI.getDailySummary(), { refreshInterval: 5000, revalidateOnFocus: true });
+  const { data: weeklyLogsData } = useSWR('/api/activity/logs?days=7', () => activityAPI.getLogs(7), { refreshInterval: 15000, revalidateOnFocus: true });
+  const { data: recommendationsData } = useSWR('/api/user/recommendations', () => userAPI.getRecommendations(), { refreshInterval: 10000 });
+  const { data: appUsageData } = useSWR('/api/activity/app-usage', () => activityAPI.getAppUsage(), { refreshInterval: 5000 });
 
   useEffect(() => {
     if (scoreData) setBurnoutScore(scoreData);
@@ -48,6 +53,20 @@ export default function ModernDashboard() {
   useEffect(() => {
     if (weeklyLogsData?.logs) setWeeklyLogs(weeklyLogsData.logs);
   }, [weeklyLogsData]);
+
+  useEffect(() => {
+    if (recommendationsData?.recommendations) {
+      setRecommendations(recommendationsData.recommendations);
+    }
+  }, [recommendationsData]);
+
+  useEffect(() => {
+    if (appUsageData?.apps) {
+      setAppUsage(appUsageData.apps);
+    } else if (dailySummaryData?.app_usage) {
+      setAppUsage(dailySummaryData.app_usage);
+    }
+  }, [appUsageData, dailySummaryData]);
 
   useEffect(() => {
     if (historyData?.scores) {
@@ -161,14 +180,37 @@ export default function ModernDashboard() {
           <h1 className="text-4xl font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent mb-2">
             Burnout Detector
           </h1>
-          <p className="text-muted-foreground">Real-time health monitoring and burnout prevention</p>
+          <p className="text-muted-foreground">Real-time health monitoring (updates every second)</p>
         </div>
-        <SyncStatusIndicator />
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+            Live
+          </span>
+          <SyncStatusIndicator />
+        </div>
       </motion.div>
 
       <motion.div variants={container} initial="hidden" animate="show" className="space-y-8">
+        {scoreLoading && !burnoutScore && (
+          <motion.div variants={item} className="cyber-card p-8 text-center text-muted-foreground">
+            Loading live burnout metrics...
+          </motion.div>
+        )}
+
+        {!scoreLoading && burnoutScore?.message && burnoutScore.log_count === undefined && (burnoutScore.score === 0 || burnoutScore.score === undefined) && (
+          <motion.div variants={item} className="cyber-card p-8 border border-primary/30">
+            <h2 className="text-xl font-bold mb-2">Start collecting data</h2>
+            <p className="text-muted-foreground text-sm mb-4">{burnoutScore.message}</p>
+            <ul className="text-sm text-muted-foreground space-y-2 list-disc list-inside">
+              <li>Keep this dashboard open on mobile (Android/iOS) for browser-based tracking</li>
+              <li>Run the desktop agent on Windows/Mac for OS-level app monitoring</li>
+            </ul>
+          </motion.div>
+        )}
+
         {/* Main Score Card */}
-        {burnoutScore && (
+        {burnoutScore && burnoutScore.score !== undefined && (
           <motion.div variants={item} className="cyber-card p-8 mb-8 overflow-hidden relative">
             <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-secondary/10 opacity-0 group-hover:opacity-100 transition-opacity" />
             
@@ -240,9 +282,14 @@ export default function ModernDashboard() {
                     {burnoutScore.risk_level === 'medium' && 'Maintain balance. Keep monitoring your health metrics.'}
                     {burnoutScore.risk_level === 'low' && 'Great job! Keep maintaining your healthy habits.'}
                   </p>
-                  <Button className="w-full bg-gradient-to-r from-primary to-secondary hover:shadow-lg hover:shadow-primary/50">
-                    View Recommendations
-                  </Button>
+                  {burnoutScore.recommendation && (
+                    <p className="text-sm text-primary mb-3">{burnoutScore.recommendation}</p>
+                  )}
+                  <Link href="/analytics" className="block">
+                    <Button className="w-full bg-gradient-to-r from-primary to-secondary hover:shadow-lg hover:shadow-primary/50">
+                      View Full Report
+                    </Button>
+                  </Link>
                   {dailySummary && (
                     <p className="text-xs text-muted-foreground mt-3">
                       Today’s record: {dailySummary.log_count} activity logs, {dailySummary.breaks_taken} breaks, {dailySummary.late_night_usage ? 'late-night usage recorded' : 'no late-night usage'}.
@@ -312,11 +359,46 @@ export default function ModernDashboard() {
             </ResponsiveContainer>
           </motion.div>
 
+          {/* App Usage */}
+          <motion.div variants={item} className="cyber-card p-6 lg:col-span-2">
+            <h3 className="text-xl font-bold mb-4 text-foreground">App Usage Today</h3>
+            {appUsage.length > 0 ? (
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {appUsage.slice(0, 10).map((app: any, idx: number) => (
+                  <div key={idx} className="flex justify-between items-center p-3 rounded-lg bg-black/30 border border-border/50">
+                    <div>
+                      <p className="font-medium text-sm">{app.app_name}</p>
+                      {app.platform && (
+                        <p className="text-xs text-muted-foreground capitalize">{app.platform}</p>
+                      )}
+                    </div>
+                    <p className="text-sm text-primary">{Math.round(app.duration_minutes)} min</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No app usage recorded yet. Enable tracking via desktop agent or mobile browser.</p>
+            )}
+          </motion.div>
+
           {/* Recent Insights */}
           <motion.div variants={item} className="cyber-card p-6 space-y-4">
-            <h3 className="text-xl font-bold mb-4 text-foreground">Insights & Recommendations</h3>
+            <h3 className="text-xl font-bold mb-4 text-foreground">Personalized Recommendations</h3>
             <div className="space-y-3">
-              {insights.map((insight, idx) => (
+              {recommendations.length > 0
+                ? recommendations.map((rec: any, idx: number) => (
+                    <motion.div
+                      key={idx}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className="p-4 rounded-lg bg-black/30 border border-border/50"
+                    >
+                      <p className="font-semibold text-sm">{rec.action}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{rec.reason}</p>
+                      <span className="text-xs text-primary mt-2 inline-block">{rec.priority} priority</span>
+                    </motion.div>
+                  ))
+                : insights.map((insight, idx) => (
                 <motion.div
                   key={idx}
                   initial={{ opacity: 0, x: -20 }}
@@ -332,7 +414,7 @@ export default function ModernDashboard() {
                     </div>
                   </div>
                 </motion.div>
-              ))}
+              )))}
             </div>
           </motion.div>
         </div>

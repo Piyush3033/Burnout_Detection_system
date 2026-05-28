@@ -49,9 +49,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (typeof window !== 'undefined' && navigator.onLine) {
         try {
-          const profile = await userAPI.getProfile();
-          setUser(profile);
-          localStorage.setItem('user', JSON.stringify(profile));
+          const profile = (await userAPI.getProfile()) as User & { _id?: string };
+          const normalized: User = {
+            id: profile.id || profile._id || '',
+            email: profile.email,
+            full_name: profile.full_name || '',
+            role: profile.role,
+          };
+          setUser(normalized);
+          localStorage.setItem('user', JSON.stringify(normalized));
         } catch {
           localStorage.removeItem('token');
           localStorage.removeItem('user');

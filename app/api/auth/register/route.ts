@@ -3,12 +3,16 @@ import { BACKEND_URL } from '@/app/lib/backend';
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, email, password } = await req.json();
+    const { email, password, full_name, fullName, name } = await req.json();
 
     const response = await fetch(`${BACKEND_URL}/api/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, password }),
+      body: JSON.stringify({
+        email,
+        password,
+        full_name: full_name || fullName || name || '',
+      }),
     });
 
     if (!response.ok) {

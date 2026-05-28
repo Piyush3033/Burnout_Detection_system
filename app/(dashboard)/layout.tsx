@@ -3,11 +3,16 @@
 import { useAuth } from '@/app/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { useRestNotifications } from '@/hooks/useRestNotifications';
+import { useActivityCollector } from '@/hooks/useActivityCollector';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, loading, logout, user } = useAuth();
   const router = useRouter();
+  useRestNotifications(isAuthenticated);
+  useActivityCollector(isAuthenticated && user?.role !== 'admin');
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -38,6 +43,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <h1 className="text-2xl font-semibold text-foreground">Burnout Dashboard</h1>
         </div>
         <div className="flex items-center gap-3">
+          {user?.role === 'admin' && (
+            <Link href="/admin">
+              <Button variant="outline" className="border-primary/50">Admin</Button>
+            </Link>
+          )}
+          <Link href="/settings">
+            <Button variant="outline" className="border-primary/50">Settings</Button>
+          </Link>
           <Button onClick={logout} className="bg-destructive text-white hover:bg-destructive/90">
             Logout
           </Button>
