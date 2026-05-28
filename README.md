@@ -1,6 +1,6 @@
 # Burnout Detector
 
-A production-ready burnout detection system with real-time monitoring, ML-powered scoring, and a modern cyberpunk dashboard for wellness tracking.
+A production-ready burnout detection system with real-time monitoring, ML-powered scoring, and a modern cyberpunk dashboard for wellness tracking..
 
 ## Features
 
