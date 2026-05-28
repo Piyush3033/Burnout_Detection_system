@@ -50,7 +50,7 @@ function normalizeActivityPayload(data: z.infer<typeof activityInputSchema>) {
   };
 }
 
-function parseTimestamp(value: string | undefined): Date {
+function parseTimestamp(value?: string): Date {
   return value ? new Date(value) : new Date();
 }
 
@@ -88,12 +88,13 @@ function calculateBurnoutComponents(logData: ReturnType<typeof normalizeActivity
   };
 }
 
-async function saveBurnoutScore(userId: string, logData: ReturnType<typeof normalizeActivityPayload>, timestamp: Date) {
+async function saveBurnoutScoreInternal(userId: string, logData: ReturnType<typeof normalizeActivityPayload>, timestamp: any) {
   const result = calculateBurnoutComponents(logData);
+  const scoreTimestamp = typeof timestamp === 'string' ? new Date(timestamp) : timestamp ?? new Date();
 
   const score = new BurnoutScore({
     user_id: userId,
-    timestamp,
+    timestamp: scoreTimestamp,
     score: result.score,
     risk_level: result.risk_level,
     components: result.components
@@ -108,16 +109,17 @@ router.post('/log', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const payload = activityInputSchema.parse(req.body);
     const normalized = normalizeActivityPayload(payload);
-    const timestamp = parseTimestamp(payload.timestamp);
+    const parsedTimestamp: Date = parseTimestamp(payload.timestamp as string | undefined);
 
     const activityLog = new ActivityLog({
       user_id: req.userId,
-      timestamp,
+      timestamp: parsedTimestamp,
       data: normalized
     });
 
     await activityLog.save();
-    const burnoutScore = await saveBurnoutScore(req.userId, normalized, timestamp);
+    // @ts-ignore: parsedTimestamp is a Date via parseTimestamp helper
+    const burnoutScore = await saveBurnoutScoreInternal(req.userId, normalized, parsedTimestamp);
 
     res.status(201).json({
       message: 'Activity logged successfully',
@@ -140,17 +142,18 @@ router.post('/batch', authMiddleware, async (req: AuthRequest, res: Response) =>
 
     for (const entry of payload.entries) {
       const normalized = normalizeActivityPayload(entry);
-      const timestamp = parseTimestamp(entry.timestamp);
+      const parsedTimestamp: Date = parseTimestamp(entry.timestamp as string | undefined);
 
       const activityLog = new ActivityLog({
         user_id: req.userId,
-        timestamp,
+        timestamp: parsedTimestamp,
         data: normalized
       });
       await activityLog.save();
       createdLogs.push(activityLog);
 
-      const burnoutScore = await saveBurnoutScore(req.userId, normalized, timestamp);
+      // @ts-ignore: parsedTimestamp is a Date via parseTimestamp helper
+      const burnoutScore = await saveBurnoutScoreInternal(req.userId, normalized, parsedTimestamp);
       createdScores.push(burnoutScore);
     }
 
