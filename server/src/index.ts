@@ -7,6 +7,7 @@ import authRoutes from './routes/auth.js';
 import userRoutes from './routes/user.js';
 import activityRoutes from './routes/activity.js';
 import adminRoutes from './routes/admin.js';
+import User from './models/User.js';
 
 dotenv.config();
 
