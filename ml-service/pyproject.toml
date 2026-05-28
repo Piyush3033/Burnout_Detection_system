@@ -1,0 +1,23 @@
+[project]
+name = "burnout-detector-ml"
+version = "1.0.0"
+description = "ML Analytics service for Digital Burnout Detector"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi==0.104.1",
+    "uvicorn==0.24.0",
+    "pydantic==2.5.0",
+    "pymongo==4.6.0",
+    "motor==3.3.2",
+    "numpy==1.24.3",
+    "pandas==2.1.3",
+    "scikit-learn==1.3.2",
+    "apscheduler==3.10.4",
+    "python-dotenv==1.0.0",
+    "httpx==0.25.1",
+    "pytz==2023.3"
+]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
