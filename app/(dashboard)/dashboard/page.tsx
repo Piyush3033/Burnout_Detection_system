@@ -414,7 +414,7 @@ export default function ModernDashboard() {
                     </div>
                   </div>
                 </motion.div>
-              )))}
+              ))}
             </div>
           </motion.div>
         </div>
