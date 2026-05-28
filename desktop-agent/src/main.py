@@ -6,11 +6,13 @@ Real-time OS-level data collection and monitoring
 import logging
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, time
 from pathlib import Path
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 
+import time
+import psutil
 from src.collector import DataCollector
 from src.uploader import DataUploader
 from src.system_monitor import SystemMonitor
@@ -52,7 +54,7 @@ class BurnoutAgent:
             
             activity_data = self.collector.collect_activity()
             system_data = self.monitor.get_system_health()
-            system_data['cpu_uptime_seconds'] = self.collector.get_cpu_uptime()
+            system_data['cpu_uptime_seconds'] = int(time.time() - psutil.boot_time())
             
             if 'screen_time_minutes' not in activity_data:
                 idle_seconds = activity_data.get('idle_time_seconds', 0)
