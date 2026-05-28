@@ -43,6 +43,8 @@ export async function apiCall(
   return response.json();
 }
 
+export const fetcher = (endpoint: string) => apiCall(endpoint)
+
 // Auth APIs
 export const authAPI = {
   register: (email: string, password: string, fullName?: string) =>
