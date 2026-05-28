@@ -1,5 +1,6 @@
 import { dbManager, SyncQueueItem } from './indexedDB';
-import { API_URL } from '@/app/lib/api';
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 export interface SyncStatus {
   isOnline: boolean;
@@ -21,7 +22,7 @@ class SyncManager {
   };
   private syncInterval: NodeJS.Timeout | null = null;
   private isSyncing = false;
-  private backendUrl = `${API_URL.replace(/\/$/, '')}/health`;
+  private backendUrl = `${API_BASE_URL.replace(/\/$/, '')}/health`;
 
   constructor() {
     if (typeof window !== 'undefined') {
