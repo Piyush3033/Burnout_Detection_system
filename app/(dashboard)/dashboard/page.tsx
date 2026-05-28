@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { AlertCircle, TrendingUp, Activity, Clock, Zap, ArrowUp, ArrowDown, Flame } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { cn, formatDurationMinutes } from '@/lib/utils';
 import { SyncStatusIndicator } from '@/components/dashboard/SyncStatusIndicator';
 
 const container = {
@@ -34,6 +34,7 @@ export default function ModernDashboard() {
   const [trendData, setTrendData] = useState<any[]>([]);
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [appUsage, setAppUsage] = useState<any[]>([]);
+  const [runningApps, setRunningApps] = useState<any[]>([]);
 
   const { data: scoreData, isLoading: scoreLoading } = useSWR('/api/user/burnout-score', () => userAPI.getBurnoutScore(), { refreshInterval: 1000, revalidateOnFocus: true });
   const { data: historyData } = useSWR('/api/user/burnout-history?days=30', () => userAPI.getBurnoutHistory(30), { refreshInterval: 30000, revalidateOnFocus: true });
@@ -66,6 +67,11 @@ export default function ModernDashboard() {
     } else if (dailySummaryData?.app_usage) {
       setAppUsage(dailySummaryData.app_usage);
     }
+    if (appUsageData?.running_apps_now?.length) {
+      setRunningApps(appUsageData.running_apps_now);
+    } else if (dailySummaryData?.running_apps_now?.length) {
+      setRunningApps(dailySummaryData.running_apps_now);
+    }
   }, [appUsageData, dailySummaryData]);
 
   useEffect(() => {
@@ -84,9 +90,10 @@ export default function ModernDashboard() {
     : 0;
 
   const weeklyActivityValue = activeDays > 0 ? Math.min(100, Math.round((activeDays / 7) * 100)) : 0;
-  const screenTimeValue = dailySummary?.total_screen_time !== undefined
-    ? `${Math.round(dailySummary.total_screen_time / 60)}h ${dailySummary.total_screen_time % 60}m`
-    : '—';
+  const screenTimeValue =
+    dailySummary?.total_screen_time !== undefined
+      ? formatDurationMinutes(dailySummary.total_screen_time)
+      : '—';
   const energyLevelValue = burnoutScore?.score !== undefined
     ? Math.max(0, Math.round(100 - burnoutScore.score))
     : null;
@@ -360,24 +367,57 @@ export default function ModernDashboard() {
           </motion.div>
 
           {/* App Usage */}
-          <motion.div variants={item} className="cyber-card p-6 lg:col-span-2">
+          <motion.div variants={item} className="cyber-card p-6">
             <h3 className="text-xl font-bold mb-4 text-foreground">App Usage Today</h3>
             {appUsage.length > 0 ? (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {appUsage.slice(0, 10).map((app: any, idx: number) => (
+              <div className="space-y-2 max-h-56 overflow-y-auto">
+                {appUsage.slice(0, 12).map((app: any, idx: number) => (
                   <div key={idx} className="flex justify-between items-center p-3 rounded-lg bg-black/30 border border-border/50">
                     <div>
                       <p className="font-medium text-sm">{app.app_name}</p>
-                      {app.platform && (
-                        <p className="text-xs text-muted-foreground capitalize">{app.platform}</p>
-                      )}
+                      <div className="flex gap-2 mt-1">
+                        {app.platform && (
+                          <span className="text-xs text-muted-foreground capitalize">{app.platform}</span>
+                        )}
+                        {app.is_foreground && (
+                          <span className="text-xs text-green-400">Active</span>
+                        )}
+                      </div>
                     </div>
-                    <p className="text-sm text-primary">{Math.round(app.duration_minutes)} min</p>
+                    <p className="text-sm text-primary">{formatDurationMinutes(app.duration_minutes)}</p>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">No app usage recorded yet. Enable tracking via desktop agent or mobile browser.</p>
+              <p className="text-sm text-muted-foreground">No app usage yet. Run the desktop agent for full OS tracking.</p>
+            )}
+          </motion.div>
+
+          {/* Running Applications */}
+          <motion.div variants={item} className="cyber-card p-6">
+            <h3 className="text-xl font-bold mb-2 text-foreground">Running Applications</h3>
+            <p className="text-xs text-muted-foreground mb-4">All apps detected on your system (updated each sync)</p>
+            {runningApps.length > 0 ? (
+              <div className="space-y-2 max-h-56 overflow-y-auto">
+                {runningApps.slice(0, 20).map((app: any, idx: number) => (
+                  <div key={idx} className="flex justify-between items-center p-3 rounded-lg bg-black/30 border border-border/50">
+                    <div>
+                      <p className="font-medium text-sm">{app.app_name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {app.is_foreground ? 'In focus' : 'Background'}
+                        {app.process_count > 1 ? ` · ${app.process_count} processes` : ''}
+                      </p>
+                    </div>
+                    {app.duration_minutes > 0 ? (
+                      <p className="text-sm text-primary">{formatDurationMinutes(app.duration_minutes)}</p>
+                    ) : (
+                      <span className="text-xs px-2 py-1 rounded bg-primary/10 text-primary">Running</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Start the desktop agent to list running applications.</p>
             )}
           </motion.div>
 

@@ -14,7 +14,20 @@ export interface IActivityLog extends Document {
     app_name?: string;
     duration_minutes?: number;
   };
-  app_usage?: Array<{ app_name: string; duration_minutes: number }>;
+  app_usage?: Array<{
+    app_name: string;
+    duration_minutes: number;
+    is_foreground?: boolean;
+    is_running?: boolean;
+    process_count?: number;
+  }>;
+  running_apps?: Array<{
+    app_name: string;
+    duration_minutes?: number;
+    process_count?: number;
+    is_foreground?: boolean;
+    is_running?: boolean;
+  }>;
   system?: {
     cpu_percent?: number;
     memory_percent?: number;
@@ -47,7 +60,19 @@ const activityLogSchema = new Schema<IActivityLog>(
     app_usage: [
       {
         app_name: { type: String, default: 'unknown' },
-        duration_minutes: { type: Number, default: 0 }
+        duration_minutes: { type: Number, default: 0 },
+        is_foreground: { type: Boolean, default: false },
+        is_running: { type: Boolean, default: false },
+        process_count: { type: Number, default: 0 }
+      }
+    ],
+    running_apps: [
+      {
+        app_name: { type: String, default: 'unknown' },
+        duration_minutes: { type: Number, default: 0 },
+        process_count: { type: Number, default: 0 },
+        is_foreground: { type: Boolean, default: false },
+        is_running: { type: Boolean, default: true }
       }
     ],
     data: {

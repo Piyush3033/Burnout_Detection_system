@@ -21,7 +21,21 @@ const activityInputSchema = z.object({
     .array(
       z.object({
         app_name: z.string(),
-        duration_minutes: z.number().min(0),
+        duration_minutes: z.number().min(0).optional(),
+        is_foreground: z.boolean().optional(),
+        is_running: z.boolean().optional(),
+        process_count: z.number().min(0).optional(),
+      })
+    )
+    .optional(),
+  running_apps: z
+    .array(
+      z.object({
+        app_name: z.string(),
+        duration_minutes: z.number().min(0).optional(),
+        is_foreground: z.boolean().optional(),
+        is_running: z.boolean().optional(),
+        process_count: z.number().min(0).optional(),
       })
     )
     .optional(),
@@ -84,6 +98,7 @@ function normalizeActivityPayload(data: z.infer<typeof activityInputSchema>) {
     app_name: activity.app_name ?? active_window,
     duration_minutes: activity.duration_minutes ?? screen_time_minutes,
     app_usage: data.app_usage ?? [],
+    running_apps: data.running_apps ?? [],
   };
 }
 
@@ -162,6 +177,7 @@ router.post('/log', authMiddleware, async (req: AuthRequest, res: Response) => {
         duration_minutes: normalized.duration_minutes,
       },
       app_usage: normalized.app_usage,
+      running_apps: normalized.running_apps,
       system: systemPayload,
     });
 
@@ -211,6 +227,7 @@ router.post('/batch', authMiddleware, async (req: AuthRequest, res: Response) =>
           duration_minutes: normalized.duration_minutes,
         },
         app_usage: normalized.app_usage,
+        running_apps: normalized.running_apps,
         system: systemPayload,
       });
       await activityLog.save();
@@ -277,46 +294,82 @@ router.get('/app-usage', authMiddleware, async (req: AuthRequest, res: Response)
 
     const usageMap: Record<
       string,
-      { app_name: string; duration_minutes: number; platform: string; sessions: number }
+      {
+        app_name: string;
+        duration_minutes: number;
+        platform: string;
+        sessions: number;
+        is_running: boolean;
+        is_foreground: boolean;
+        process_count: number;
+      }
     > = {};
 
-    for (const log of logs) {
-      if (log.app_usage?.length) {
-        for (const entry of log.app_usage) {
-          const key = `${entry.app_name}:${log.platform}`;
-          if (!usageMap[key]) {
-            usageMap[key] = {
-              app_name: entry.app_name,
-              duration_minutes: 0,
-              platform: log.platform,
-              sessions: 0,
-            };
-          }
-          usageMap[key].duration_minutes += entry.duration_minutes;
-          usageMap[key].sessions += 1;
-        }
-      }
-
-      const appName = log.data.app_name || log.data.active_window || 'unknown';
-      const key = `${appName}:${log.platform}`;
+    const mergeApp = (
+      appName: string,
+      platform: string,
+      duration: number,
+      extras?: { is_running?: boolean; is_foreground?: boolean; process_count?: number }
+    ) => {
+      const key = `${appName}:${platform}`;
       if (!usageMap[key]) {
         usageMap[key] = {
           app_name: appName,
           duration_minutes: 0,
-          platform: log.platform,
+          platform,
           sessions: 0,
+          is_running: false,
+          is_foreground: false,
+          process_count: 0,
         };
       }
-      usageMap[key].duration_minutes += log.data.duration_minutes ?? log.data.screen_time_minutes;
-      usageMap[key].sessions += 1;
+      usageMap[key].duration_minutes += duration;
+      if (duration > 0) usageMap[key].sessions += 1;
+      if (extras?.is_running) usageMap[key].is_running = true;
+      if (extras?.is_foreground) usageMap[key].is_foreground = true;
+      if (extras?.process_count) {
+        usageMap[key].process_count = Math.max(usageMap[key].process_count, extras.process_count);
+      }
+    };
+
+    for (const log of logs) {
+      if (log.app_usage?.length) {
+        for (const entry of log.app_usage) {
+          mergeApp(entry.app_name, log.platform, entry.duration_minutes ?? 0, {
+            is_running: entry.is_running,
+            is_foreground: entry.is_foreground,
+            process_count: entry.process_count,
+          });
+        }
+      }
+
+      for (const entry of log.running_apps ?? []) {
+        mergeApp(entry.app_name, log.platform, entry.duration_minutes ?? 0, {
+          is_running: true,
+          is_foreground: entry.is_foreground,
+          process_count: entry.process_count,
+        });
+      }
+
+      const appName = log.data.app_name || log.data.active_window || 'unknown';
+      mergeApp(
+        appName,
+        log.platform,
+        log.data.duration_minutes ?? log.data.screen_time_minutes ?? 0
+      );
     }
 
     const apps = Object.values(usageMap).sort((a, b) => b.duration_minutes - a.duration_minutes);
+    const latestLog = await ActivityLog.findOne({
+      user_id: req.userId,
+      timestamp: { $gte: startOfDay, $lte: endOfDay },
+    }).sort({ timestamp: -1 });
 
     res.json({
       date: date.toISOString().split('T')[0],
       total_apps: apps.length,
       apps,
+      running_apps_now: latestLog?.running_apps ?? [],
       by_platform: {
         desktop: apps.filter((a) => a.platform === 'desktop'),
         android: apps.filter((a) => a.platform === 'android'),
@@ -348,6 +401,12 @@ router.get('/daily-summary', authMiddleware, async (req: AuthRequest, res: Respo
     const totalSystemLogs = logs.filter((log) => log.system !== undefined).length;
 
     logs.forEach((log) => {
+      if (log.app_usage?.length) {
+        for (const entry of log.app_usage) {
+          appUsageMap[entry.app_name] =
+            (appUsageMap[entry.app_name] || 0) + (entry.duration_minutes ?? 0);
+        }
+      }
       const appName = log.data.app_name || log.system?.active_window || log.data.active_window || 'unknown';
       appUsageMap[appName] =
         (appUsageMap[appName] || 0) + (log.data.duration_minutes ?? log.data.screen_time_minutes);
@@ -356,6 +415,9 @@ router.get('/daily-summary', authMiddleware, async (req: AuthRequest, res: Respo
     const topApplication =
       Object.entries(appUsageMap).sort((a, b) => b[1] - a[1])[0]?.[0] || 'unknown';
     const maxCpuUptime = logs.reduce((max, log) => Math.max(max, log.system?.cpu_uptime_seconds ?? 0), 0);
+    const latestLog = logs.length
+      ? logs.reduce((a, b) => (a.timestamp > b.timestamp ? a : b))
+      : null;
 
     const summary = {
       date: date.toISOString().split('T')[0],
@@ -375,6 +437,8 @@ router.get('/daily-summary', authMiddleware, async (req: AuthRequest, res: Respo
         .map(([app_name, duration_minutes]) => ({ app_name, duration_minutes }))
         .sort((a, b) => b.duration_minutes - a.duration_minutes)
         .slice(0, 15),
+      running_apps_now: latestLog?.running_apps ?? [],
+      running_app_count: latestLog?.running_apps?.length ?? 0,
       platforms: {
         desktop: logs.filter((l) => l.platform === 'desktop').length,
         android: logs.filter((l) => l.platform === 'android').length,

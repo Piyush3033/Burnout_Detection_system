@@ -38,7 +38,7 @@ class BurnoutAgent:
         self.user_token = os.getenv('USER_TOKEN')
         self.collection_interval_seconds = int(os.getenv('COLLECTION_INTERVAL_SECONDS', 5))
         
-        self.collector = DataCollector()
+        self.collector = DataCollector(self.collection_interval_seconds)
         self.uploader = DataUploader(self.api_url, self.user_token)
         self.monitor = SystemMonitor()
         
@@ -67,6 +67,9 @@ class BurnoutAgent:
                 activity_data['break_taken'] = activity_data.get('idle_time_seconds', 0) >= 300
 
             payload = {
+                'platform': 'desktop',
+                'app_usage': activity_data.get('app_usage', []),
+                'running_apps': activity_data.get('running_apps', []),
                 'activity': activity_data,
                 'system': system_data,
                 'timestamp': self._get_timestamp(),

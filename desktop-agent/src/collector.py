@@ -9,10 +9,12 @@ import platform
 import subprocess
 import time
 from datetime import datetime
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 import psutil
 from pynput import keyboard, mouse
+
+from src.app_tracker import ApplicationTracker, normalize_app_name
 
 logger = logging.getLogger(__name__)
 
@@ -20,13 +22,15 @@ logger = logging.getLogger(__name__)
 class DataCollector:
     """Collects OS-level data for burnout detection"""
     
-    def __init__(self):
+    def __init__(self, collection_interval_seconds: float = 5.0):
         self.session_start = datetime.utcnow()
         self.last_activity_time = datetime.utcnow()
         self.keyboard_event_count = 0
         self.mouse_event_count = 0
         self.active_window_history: List[str] = []
         self.active_window_change_count = 0
+        self.collection_interval_seconds = collection_interval_seconds
+        self.app_tracker = ApplicationTracker(collection_interval_seconds)
         
         # Track listeners
         self._setup_event_listeners()
@@ -69,8 +73,11 @@ class DataCollector:
             self.keyboard_event_count = 0
             self.mouse_event_count = 0
 
-            total_seconds = int((datetime.utcnow() - self.session_start).total_seconds())
-            screen_time_minutes = max(0.0, round((total_seconds - idle_time) / 60, 2))
+            interval_minutes = round(self.collection_interval_seconds / 60.0, 4)
+            screen_time_minutes = 0.0 if idle_time >= self.collection_interval_seconds else interval_minutes
+
+            app_payload = self.app_tracker.build_payload(active_window, idle_time)
+            foreground_app = normalize_app_name(None, window_title=active_window)
 
             return {
                 'idle_time_seconds': idle_time,
@@ -79,8 +86,13 @@ class DataCollector:
                 'mouse_events': mouse_activity,
                 'app_switches': self.active_window_change_count,
                 'active_window': active_window,
+                'app_name': foreground_app,
                 'screen_time_minutes': screen_time_minutes,
                 'total_screen_time_minutes': screen_time_minutes,
+                'duration_minutes': screen_time_minutes,
+                'app_usage': app_payload['app_usage'],
+                'running_apps': app_payload['running_apps'],
+                'running_app_count': app_payload['running_app_count'],
                 'cpu_uptime_seconds': self.get_cpu_uptime(),
                 'total_activity_score': self._calculate_activity_score(
                     idle_time, keyboard_activity, mouse_activity
