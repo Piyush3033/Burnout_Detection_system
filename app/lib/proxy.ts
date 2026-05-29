@@ -16,6 +16,16 @@ export async function proxyToBackend(
   backendPath: string,
   options?: { method?: string; requireAuth?: boolean }
 ): Promise<NextResponse> {
+  if (!BACKEND_URL) {
+    return NextResponse.json(
+      {
+        error: 'Backend URL not configured',
+        hint: 'Set BACKEND_URL or NEXT_PUBLIC_BACKEND_URL to your backend URL in Vercel/Render',
+      },
+      { status: 500 }
+    );
+  }
+
   const requireAuth = options?.requireAuth !== false;
   const token = await getAuthToken(req);
 

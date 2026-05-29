@@ -4,6 +4,16 @@ import { BACKEND_URL } from '@/app/lib/backend';
 import { ML_SERVICE_URL } from '@/app/lib/api';
 
 export async function GET(req: NextRequest) {
+  if (!BACKEND_URL) {
+    return NextResponse.json(
+      {
+        error: 'Backend URL not configured',
+        hint: 'Set BACKEND_URL or NEXT_PUBLIC_BACKEND_URL to your backend URL in Vercel/Render',
+      },
+      { status: 500 }
+    );
+  }
+
   try {
     const daysAhead = parseInt(req.nextUrl.searchParams.get('days_ahead') || '30', 10);
     const cookieStore = await cookies();

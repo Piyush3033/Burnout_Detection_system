@@ -3,6 +3,16 @@ import { cookies } from 'next/headers';
 import { BACKEND_URL } from '@/app/lib/backend';
 
 export async function GET(req: NextRequest) {
+  if (!BACKEND_URL) {
+    return NextResponse.json(
+      {
+        error: 'Backend URL not configured',
+        hint: 'Set BACKEND_URL or NEXT_PUBLIC_BACKEND_URL to your backend URL in Vercel/Render',
+      },
+      { status: 500 }
+    );
+  }
+
   try {
     const range = req.nextUrl.searchParams.get('range') || '7d';
     const cookieStore = await cookies();
