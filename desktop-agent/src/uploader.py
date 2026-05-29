@@ -120,6 +120,12 @@ class DataUploader:
         try:
             endpoint = f'{self.api_url}/health'
             response = self.session.get(endpoint, timeout=5)
-            return response.status_code == 200
-        except Exception:
+            is_ok = response.status_code == 200
+            if is_ok:
+                logger.info('Backend connectivity check successful')
+            else:
+                logger.warning(f'Backend returned status {response.status_code}')
+            return is_ok
+        except Exception as e:
+            logger.warning(f'Backend connectivity check failed: {str(e)}')
             return False

@@ -28,7 +28,7 @@ export function useRestNotifications(enabled: boolean = true) {
         if (score < REST_THRESHOLDS.medium) return;
 
         const now = Date.now();
-        const cooldown = score >= REST_THRESHOLDS.critical ? 60_000 : 5 * 60_000;
+        const cooldown = score >= REST_THRESHOLDS.high ? 120_000 : 10 * 60_000;
         if (now - lastNotified.current < cooldown) return;
 
         if (!('Notification' in window)) return;
@@ -58,7 +58,7 @@ export function useRestNotifications(enabled: boolean = true) {
     };
 
     check();
-    const interval = setInterval(check, 30_000);
+    const interval = setInterval(check, 120_000);
     return () => clearInterval(interval);
   }, [enabled]);
 }

@@ -25,14 +25,20 @@ export class BurnoutScorer {
         : Math.min(100, ((metrics.app_switches - 20) / 20) * 50);
 
     const score = Math.round(
-      screenTimeScore * 0.3 +
-        breakScore * 0.25 +
+      screenTimeScore * 0.5 +
+        breakScore * 0.2 +
         sleepScore * 0.2 +
-        activityScore * 0.15
+        activityScore * 0.1
     );
 
     const risk_level =
-      score >= 75 ? 'critical' : score >= 50 ? 'high' : score >= 25 ? 'medium' : 'low';
+      score >= 75 || metrics.screen_time_minutes >= 720
+        ? 'critical'
+        : score >= 50 || metrics.screen_time_minutes >= 600
+        ? 'high'
+        : score >= 25
+        ? 'medium'
+        : 'low';
 
     return {
       score,

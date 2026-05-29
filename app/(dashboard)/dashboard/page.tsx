@@ -125,8 +125,8 @@ export default function ModernDashboard() {
     {
       title: 'Movement',
       desc: dailySummary
-        ? dailySummary.total_screen_time > 480
-          ? 'High screen time today — move every hour and stretch often.'
+        ? dailySummary.total_screen_time >= 600
+          ? 'High screen time today — you’ve crossed 10 hours, take a rest soon.'
           : 'Screen time is in a healthy range right now.'
       : 'Collecting today’s movement signals...',
       icon: Activity,

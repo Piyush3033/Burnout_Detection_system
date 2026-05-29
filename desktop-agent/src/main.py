@@ -103,12 +103,20 @@ class BurnoutAgent:
     def start(self):
         """Start the agent"""
         try:
+            # Check backend connectivity before starting
+            if not self.uploader.check_connection():
+                logger.warning('Backend is not reachable - agent will retry when backend comes online')
+            
             # Schedule collection task
+            # Allow up to 3 concurrent instances to handle slow network uploads
+            # coalesce=False prevents skipping jobs if previous one is still running
             self.scheduler.add_job(
                 self.collect_and_upload,
                 'interval',
                 seconds=self.collection_interval_seconds,
-                id='collect_task'
+                id='collect_task',
+                max_instances=3,
+                coalesce=False
             )
             
             self.scheduler.start()

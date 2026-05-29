@@ -16,11 +16,11 @@ class BurnoutScorer:
 
     # Weights for each factor
     WEIGHTS = {
-        'screen_time': 0.30,
-        'break_frequency': 0.25,
+        'screen_time': 0.50,
+        'break_frequency': 0.20,
         'sleep_quality': 0.20,
-        'physical_activity': 0.15,
-        'engagement': 0.10
+        'physical_activity': 0.10,
+        'engagement': 0.00
     }
 
     # Thresholds for risk levels
@@ -165,9 +165,9 @@ class BurnoutScorer:
 
         # Determine risk level
         risk_level = 'low'
-        if overall_score >= cls.RISK_THRESHOLDS['critical']:
+        if overall_score >= cls.RISK_THRESHOLDS['critical'] or activity_data.get('screen_time_minutes', 0) >= 720:
             risk_level = 'critical'
-        elif overall_score >= cls.RISK_THRESHOLDS['high']:
+        elif overall_score >= cls.RISK_THRESHOLDS['high'] or activity_data.get('screen_time_minutes', 0) >= 600:
             risk_level = 'high'
         elif overall_score >= cls.RISK_THRESHOLDS['medium']:
             risk_level = 'medium'
