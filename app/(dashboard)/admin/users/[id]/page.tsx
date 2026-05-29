@@ -1,6 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import { motion } from 'framer-motion';
+import useSWR from 'swr';
+import { adminAPI } from '@/app/lib/api';
 import { Button } from '@/components/ui/button';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { ArrowLeft, Mail, MapPin, Calendar, AlertTriangle, Trash2, Lock, CheckCircle } from 'lucide-react';
@@ -12,18 +15,22 @@ const item = {
 };
 
 export default function UserDetailPage({ params }: { params: { id: string } }) {
-  // Mock user data
-  const user = {
-    id: params.id,
-    name: `User ${params.id}`,
-    email: `user${params.id}@example.com`,
-    joinedDate: '2024-01-15',
-    lastActive: '2 hours ago',
+  const [actionError, setActionError] = useState('');
+  const [actionMessage, setActionMessage] = useState('');
+
+  const { data, error, isLoading } = useSWR(
+    params.id ? `/api/admin/users/${params.id}` : null,
+    () => adminAPI.getUserDetails(params.id)
+  );
+
+  const user = data?.user || {
+    email: '',
+    full_name: '',
     status: 'active',
-    riskLevel: 'high',
-    totalSessions: 156,
-    averageSessionDuration: '24m 15s',
+    role: 'user',
   };
+
+  const latestScore = data?.latest_burnout_score;
 
   const burnoutTrend = Array.from({ length: 30 }, (_, i) => ({
     date: new Date(Date.now() - (29 - i) * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
@@ -40,6 +47,21 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
     { date: 'Sun', active: 7, idle: 3, sleep: 8 },
   ];
 
+  const handleSendNotification = async () => {
+    setActionError('');
+    setActionMessage('');
+
+    try {
+      const response = await adminAPI.sendUserNotification(
+        params.id,
+        'Please review your burnout report and follow the recommended wellness actions.'
+      );
+      setActionMessage((response as any)?.message || 'Notification sent successfully');
+    } catch (err: any) {
+      setActionError(err.data?.error || 'Failed to send notification');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
       {/* Header */}
@@ -51,16 +73,20 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
           </Button>
         </Link>
 
-        <div className="flex items-start justify-between">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground mb-2">{user.name}</h1>
-            <p className="text-muted-foreground">{user.email}</p>
+            <h1 className="text-3xl font-bold text-foreground mb-2">{user.full_name || user.email || `User ${params.id}`}</h1>
+            <p className="text-muted-foreground">{user.email || 'No email available'}</p>
+            {user.role && <p className="text-xs text-muted-foreground mt-2 capitalize">Role: {user.role}</p>}
           </div>
-          <div className={`px-4 py-2 rounded-lg font-semibold text-sm ${user.riskLevel === 'high' ? 'bg-orange-500/20 border border-orange-500/50 text-orange-300' : 'bg-green-500/20 border border-green-500/50 text-green-300'}`}>
-            {user.riskLevel.toUpperCase()} RISK
+          <div className={`px-4 py-2 rounded-lg font-semibold text-sm ${latestScore?.risk_level === 'high' || user.status === 'active' ? 'bg-orange-500/20 border border-orange-500/50 text-orange-300' : 'bg-green-500/20 border border-green-500/50 text-green-300'}`}>
+            {user.status?.toUpperCase() || 'ACTIVE'}
           </div>
         </div>
       </motion.div>
+
+      {actionError && <p className="text-destructive text-sm mb-4">{actionError}</p>}
+      {actionMessage && <p className="text-green-400 text-sm mb-4">{actionMessage}</p>}
 
       <motion.div variants={{ show: { transition: { staggerChildren: 0.1 } } }} initial="hidden" animate="show" className="space-y-6">
         {/* User Info Cards */}
@@ -70,7 +96,7 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
               <Calendar className="w-4 h-4 text-primary" />
               <span className="text-sm text-muted-foreground">Joined</span>
             </div>
-            <p className="text-lg font-semibold">{user.joinedDate}</p>
+            <p className="text-lg font-semibold">{new Date(user.created_at || Date.now()).toLocaleDateString()}</p>
           </motion.div>
 
           <motion.div variants={item} className="cyber-card p-6">
@@ -78,23 +104,23 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
               <CheckCircle className="w-4 h-4 text-green-400" />
               <span className="text-sm text-muted-foreground">Last Active</span>
             </div>
-            <p className="text-lg font-semibold">{user.lastActive}</p>
+            <p className="text-lg font-semibold">{latestScore?.timestamp ? new Date(latestScore.timestamp).toLocaleString() : 'N/A'}</p>
           </motion.div>
 
           <motion.div variants={item} className="cyber-card p-6">
             <div className="flex items-center gap-3 mb-2">
               <AlertTriangle className="w-4 h-4 text-secondary" />
-              <span className="text-sm text-muted-foreground">Total Sessions</span>
+              <span className="text-sm text-muted-foreground">Latest Score</span>
             </div>
-            <p className="text-lg font-semibold">{user.totalSessions}</p>
+            <p className="text-lg font-semibold">{latestScore?.score ?? 'N/A'}</p>
           </motion.div>
 
           <motion.div variants={item} className="cyber-card p-6">
             <div className="flex items-center gap-3 mb-2">
               <MapPin className="w-4 h-4 text-purple-400" />
-              <span className="text-sm text-muted-foreground">Avg Duration</span>
+              <span className="text-sm text-muted-foreground">Status</span>
             </div>
-            <p className="text-lg font-semibold">{user.averageSessionDuration}</p>
+            <p className="text-lg font-semibold capitalize">{user.status || 'active'}</p>
           </motion.div>
         </div>
 
@@ -141,7 +167,7 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
         <motion.div variants={item} className="cyber-card p-6">
           <h3 className="text-lg font-bold mb-4">Admin Actions</h3>
           <div className="flex flex-wrap gap-3">
-            <Button className="bg-primary hover:bg-primary/80">
+            <Button className="bg-primary hover:bg-primary/80" onClick={handleSendNotification}>
               <Mail className="w-4 h-4 mr-2" />
               Send Notification
             </Button>

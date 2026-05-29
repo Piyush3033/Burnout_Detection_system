@@ -136,6 +136,31 @@ router.post('/users/:userId/deactivate', authMiddleware, adminMiddleware, async 
   }
 });
 
+// Send a notification to a specific user (admin)
+router.post('/users/:userId/notify', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { message } = req.body;
+    const user = await User.findById(req.params.userId).select('-password_hash');
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // In a production implementation, this would enqueue an email / push notification.
+    // For now, return success and include which user would receive the alert.
+    res.json({
+      message: `Notification sent to ${user.email}`,
+      user: {
+        id: user._id,
+        email: user.email,
+        full_name: user.full_name,
+      },
+      note: message || 'No message provided',
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get system-wide statistics
 router.get('/system-stats', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
   try {

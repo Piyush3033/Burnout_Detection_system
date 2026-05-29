@@ -122,6 +122,12 @@ export const adminAPI = {
       method: 'DELETE',
     }),
 
+  sendUserNotification: (userId: string, message: string) =>
+    apiCall(`/api/admin/users/${userId}/notify`, {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    }),
+
   getJobLogs: (limit: number = 50) =>
     apiCall(`/api/admin/job-logs?limit=${limit}`),
 };
