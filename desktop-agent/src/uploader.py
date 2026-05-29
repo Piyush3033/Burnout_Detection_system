@@ -16,6 +16,12 @@ class DataUploader:
     def __init__(self, api_url: str, user_token: str):
         self.api_url = api_url
         self.user_token = user_token
+
+        if not self.api_url:
+            raise ValueError('API_URL must be set to the backend base URL')
+        if not self.user_token or self.user_token.lower().startswith('your_jwt'):
+            raise ValueError('USER_TOKEN must be set to a valid JWT')
+
         self.session = requests.Session()
         self.session.headers.update({
             'Authorization': f'Bearer {user_token}',
@@ -43,14 +49,22 @@ class DataUploader:
                 timeout=10
             )
             
-            if 200 <= response.status_code < 300:
+            status_code = int(response.status_code)
+            logger.warning(
+                f'Upload response: status={status_code}, reason={response.reason}, ' \
+                f'text={response.text!r}'
+            )
+            
+            if response.ok:
                 logger.info('Data uploaded successfully')
                 return True
-            elif response.status_code == 401:
+            elif status_code == 401:
                 logger.error('Authentication failed - invalid token')
                 return False
             else:
-                logger.warning(f'Upload failed with status {response.status_code}')
+                logger.warning(
+                    f'Upload failed with status {status_code} and body: {response.text}'
+                )
                 return False
                 
         except requests.ConnectionError:
@@ -82,11 +96,14 @@ class DataUploader:
                 timeout=15
             )
             
-            if 200 <= response.status_code < 300:
+            status_code = int(response.status_code)
+            if 200 <= status_code < 300:
                 logger.info(f'Batch upload successful - {len(data_list)} entries')
                 return True
             else:
-                logger.warning(f'Batch upload failed with status {response.status_code}')
+                logger.warning(
+                    f'Batch upload failed with status {status_code} and body: {response.text}'
+                )
                 return False
                 
         except Exception as e:

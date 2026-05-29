@@ -11,6 +11,12 @@ from pathlib import Path
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 
+# Ensure the workspace root is first on sys.path when running as a script,
+# so local `src` modules are imported instead of any external `src` package.
+project_root = Path(__file__).resolve().parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
 import time
 import psutil
 from src.collector import DataCollector
@@ -36,9 +42,17 @@ class BurnoutAgent:
     """Main agent that orchestrates data collection and uploads"""
     
     def __init__(self):
-        self.api_url = os.getenv('API_URL', 'http://localhost:5000')
-        self.user_token = os.getenv('USER_TOKEN')
+        self.api_url = os.getenv('API_URL', '').strip()
+        self.user_token = os.getenv('USER_TOKEN', '').strip()
         self.collection_interval_seconds = int(os.getenv('COLLECTION_INTERVAL_SECONDS', 5))
+
+        if not self.api_url:
+            logger.error('API_URL is not configured. Set API_URL in desktop-agent/.env to your backend URL.')
+            sys.exit(1)
+
+        if not self.user_token or self.user_token.lower().startswith('your_jwt'):
+            logger.error('USER_TOKEN is not configured or invalid. Copy a valid JWT from the logged-in dashboard session into desktop-agent/.env.')
+            sys.exit(1)
         
         self.collector = DataCollector()
         self.uploader = DataUploader(self.api_url, self.user_token)
