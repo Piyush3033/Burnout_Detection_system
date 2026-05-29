@@ -67,10 +67,10 @@ export default function ModernDashboard() {
     } else if (dailySummaryData?.app_usage) {
       setAppUsage(dailySummaryData.app_usage);
     }
-    if (appUsageData?.running_apps_now?.length) {
-      setRunningApps(appUsageData.running_apps_now);
-    } else if (dailySummaryData?.running_apps_now?.length) {
-      setRunningApps(dailySummaryData.running_apps_now);
+    if (appUsageData?.running_apps?.length) {
+      setRunningApps(appUsageData.running_apps);
+    } else if (dailySummaryData?.running_apps?.length) {
+      setRunningApps(dailySummaryData.running_apps);
     }
   }, [appUsageData, dailySummaryData]);
 

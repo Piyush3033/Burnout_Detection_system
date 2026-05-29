@@ -3,8 +3,9 @@
  */
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
-const ML_SERVICE_URL =
+export const ML_SERVICE_URL =
   process.env.NEXT_PUBLIC_ML_URL || 'https://ml-service-1nhu.onrender.com';
+export default API_URL;
 
 export interface ApiError extends Error {
   status?: number;

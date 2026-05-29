@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { BACKEND_URL } from '@/app/lib/backend';
+import { ML_SERVICE_URL } from '@/app/lib/api';
 
 export async function GET(req: NextRequest) {
   try {
@@ -13,9 +13,9 @@ export async function GET(req: NextRequest) {
     }
 
     const response = await fetch(
-      `${BACKEND_URL}/api/analytics/trends?range=${range}`,
+      `${ML_SERVICE_URL}/api/analytics/trends?range=${range}`,
       {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       }
     );
 

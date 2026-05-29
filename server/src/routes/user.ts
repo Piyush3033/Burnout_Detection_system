@@ -150,17 +150,56 @@ router.get('/burnout-history', authMiddleware, async (req: AuthRequest, res: Res
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
-    const scores = await BurnoutScore.find({
+    // Fetch any existing scores in the requested range
+    const rawScores = await BurnoutScore.find({
       user_id: req.userId,
       timestamp: { $gte: startDate },
     })
       .sort({ timestamp: -1 })
       .limit(1000);
 
+    // Map existing scores by date (YYYY-MM-DD)
+    const scoreMap: Record<string, any> = {};
+    rawScores.forEach((s: any) => {
+      const day = new Date(s.timestamp).toISOString().split('T')[0];
+      // keep the most recent score for the day (rawScores already sorted desc)
+      if (!scoreMap[day]) scoreMap[day] = s;
+    });
+
+    // Build a daily series for the requested range (newest first)
+    const scores: any[] = [];
+    for (let i = 0; i < days; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      d.setHours(0, 0, 0, 0);
+      const dayKey = d.toISOString().split('T')[0];
+
+      if (scoreMap[dayKey]) {
+        scores.push(scoreMap[dayKey]);
+      } else {
+        // default entry when no recorded score exists for that day
+        scores.push({
+          user_id: req.userId,
+          timestamp: new Date(d).toISOString(),
+          score: 0,
+          risk_level: 'low',
+          components: {
+            screen_time: 0,
+            break_frequency: 0,
+            sleep_quality: 0,
+            physical_activity: 0,
+            engagement: 0,
+          },
+          // marker to indicate this was generated as a default
+          generated: true,
+        });
+      }
+    }
+
     res.json({
       user_id: req.userId,
       days,
-      count: scores.length,
+      count: rawScores.length,
       scores,
     });
   } catch (error: any) {

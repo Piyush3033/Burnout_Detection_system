@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     const response = await fetch(
       `${BACKEND_URL}/api/analytics/scores?range=${range}`,
       {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       }
     );
 
