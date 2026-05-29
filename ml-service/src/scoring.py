@@ -16,7 +16,7 @@ class BurnoutScorer:
 
     # Weights for each factor
     WEIGHTS = {
-        'screen_time': 0.50,
+        'screen_time': 30,
         'break_frequency': 0.20,
         'sleep_quality': 0.20,
         'physical_activity': 0.10,
